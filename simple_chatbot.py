@@ -1,7 +1,7 @@
 import os
 import requests
 import json
-from langchain_pinecone import PineconeVectorStore
+from langchain_community.vectorstores.pinecone import PineconeVectorStore
 from config import OPENAI_API_KEY, SYSTEM_PROMPT
 from pinecone_processor import PineconePDFProcessor
 
