@@ -1,6 +1,6 @@
 from typing import List
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores.pinecone import PineconeVectorStore
+from langchain_community.vectorstores import Pinecone
 from langchain_huggingface import HuggingFaceEmbeddings
 from config import PDF_PATH, PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME, PINECONE_NAMESPACE
 from text_processor import TextProcessor
