@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.so
+.Python
+venv/
+ENV/
+
+# Environment variables
+.env
+
+# macOS
+.DS_Store
+
+# Local development
+start_app.py
+test_chatbot.py
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Streamlit
+.streamlit/secrets.toml 
+
+# Lokale Vektordatenbank (nicht mehr benötigt mit Pinecone)
+data/vectorstore/ 

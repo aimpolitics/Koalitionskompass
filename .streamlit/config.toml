@@ -1,0 +1,38 @@
+[theme]
+# Primäre Akzentfarbe für interaktive Elemente
+primaryColor = "#1867C0"
+
+# Hintergrundfarbe für die Hauptseite (reines Weiß)
+backgroundColor = "#FFFFFF"
+
+# Hintergrundfarbe für Seitenleiste und die meisten interaktiven Widgets
+secondaryBackgroundColor = "#F8FAFC"
+
+# Farbe für Text, Figuren und Überschriften
+textColor = "#262730"
+
+# Schriftart
+font = "sans serif"
+
+# Setze den Modus explizit auf "light"
+base = "light"
+
+[server]
+# Server-Konfiguration
+enableCORS = true
+enableWebsocketCompression = false
+headless = true
+
+[browser]
+# Serverport und automatische Browser-Öffnung konfigurieren
+serverAddress = "localhost"
+serverPort = 8501
+gatherUsageStats = false
+
+[logger]
+# Logging-Level
+level = "info"
+
+[runner]
+# Reset any auto-rerun/callback for clear behavior
+fastReruns = false 
