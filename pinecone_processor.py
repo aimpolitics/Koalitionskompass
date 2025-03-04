@@ -14,24 +14,62 @@ import streamlit as st
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Try to get API keys from Streamlit secrets first, then from config
-pinecone_api_key = PINECONE_API_KEY
-pinecone_environment = PINECONE_ENVIRONMENT
+# Default to None to force checking
+pinecone_api_key = None
+pinecone_environment = None
 
-# If running in Streamlit cloud, check for secrets
-if hasattr(st, 'secrets') and 'pinecone' in st.secrets:
-    if st.secrets.pinecone.get('api_key'):
-        pinecone_api_key = st.secrets.pinecone.get('api_key')
-        logger.info("Using Pinecone API key from Streamlit secrets")
-    if st.secrets.pinecone.get('environment'):
-        pinecone_environment = st.secrets.pinecone.get('environment')
-        logger.info("Using Pinecone environment from Streamlit secrets")
+# Debug secrets loading
+logger.info("Starting to load Pinecone configuration...")
+
+# Try from Streamlit secrets first (direct access)
+if hasattr(st, 'secrets'):
+    logger.info("Streamlit secrets available")
+    
+    # Method 1: Direct dict-like access
+    if 'pinecone' in st.secrets:
+        logger.info("Found 'pinecone' section in st.secrets")
+        try:
+            # Debugging - print all keys in pinecone section
+            logger.info(f"Keys in pinecone section: {st.secrets['pinecone'].keys()}")
+            
+            pinecone_api_key = st.secrets['pinecone'].get('api_key')
+            logger.info(f"API Key from st.secrets['pinecone']: {'Found' if pinecone_api_key else 'Not found'}")
+            
+            pinecone_environment = st.secrets['pinecone'].get('environment')
+            logger.info(f"Environment from st.secrets['pinecone']: {'Found' if pinecone_environment else 'Not found'}")
+        except Exception as e:
+            logger.error(f"Error accessing pinecone secrets: {str(e)}")
+    
+    # Method 2: Flat secrets with prefix
+    if pinecone_api_key is None:
+        pinecone_api_key = st.secrets.get("PINECONE_API_KEY")
+        logger.info(f"Tried PINECONE_API_KEY directly: {'Found' if pinecone_api_key else 'Not found'}")
+    
+    if pinecone_environment is None:
+        pinecone_environment = st.secrets.get("PINECONE_ENVIRONMENT")
+        logger.info(f"Tried PINECONE_ENVIRONMENT directly: {'Found' if pinecone_environment else 'Not found'}")
+
+# Try config if not found in secrets
+if pinecone_api_key is None:
+    pinecone_api_key = PINECONE_API_KEY
+    logger.info(f"Using Pinecone API key from config: {'Found' if pinecone_api_key else 'Not found'}")
+
+if pinecone_environment is None:
+    pinecone_environment = PINECONE_ENVIRONMENT
+    logger.info(f"Using Pinecone environment from config: {'Found' if pinecone_environment else 'Not found'}")
 
 # Set environment variables if keys exist
 if pinecone_api_key:
     os.environ["PINECONE_API_KEY"] = pinecone_api_key
+    logger.info("Set PINECONE_API_KEY in environment variables")
+else:
+    logger.error("No Pinecone API key found in any source!")
+
 if pinecone_environment:
     os.environ["PINECONE_ENVIRONMENT"] = pinecone_environment
+    logger.info("Set PINECONE_ENVIRONMENT in environment variables")
+else:
+    logger.error("No Pinecone environment found in any source!")
 
 class PineconePDFProcessor:
     def __init__(self):
@@ -44,6 +82,12 @@ class PineconePDFProcessor:
         self.index_name = PINECONE_INDEX_NAME
         self.namespace = PINECONE_NAMESPACE
         self.pc = None
+        
+        # Debug
+        logger.info(f"PineconePDFProcessor initialized with API key: {'Present' if self.api_key else 'Missing'}")
+        logger.info(f"PineconePDFProcessor initialized with environment: {'Present' if self.environment else 'Missing'}")
+        logger.info(f"PineconePDFProcessor initialized with index name: {self.index_name}")
+        logger.info(f"PineconePDFProcessor initialized with namespace: {self.namespace}")
         
     def load_and_process_pdf(self) -> List:
         """Load PDF and process its content."""

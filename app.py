@@ -16,6 +16,33 @@ st.set_page_config(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# DEBUG: Check if secrets are available
+if hasattr(st, 'secrets'):
+    st.write("### Secrets Debugging")
+    try:
+        if 'pinecone' in st.secrets:
+            st.write("Found 'pinecone' section")
+            st.write(f"Available keys: {list(st.secrets['pinecone'].keys())}")
+            
+            if 'api_key' in st.secrets['pinecone']:
+                api_key = st.secrets['pinecone']['api_key']
+                masked_key = f"{api_key[:5]}...{api_key[-5:]}" if len(api_key) > 10 else "Too short"
+                st.write(f"API key found: {masked_key}")
+            else:
+                st.write("No 'api_key' in pinecone section")
+                
+            if 'environment' in st.secrets['pinecone']:
+                st.write(f"Environment found: {st.secrets['pinecone']['environment']}")
+            else:
+                st.write("No 'environment' in pinecone section")
+        else:
+            st.write("No 'pinecone' section found")
+            st.write(f"Available sections: {list(st.secrets.keys())}")
+    except Exception as e:
+        st.write(f"Error accessing secrets: {str(e)}")
+else:
+    st.write("No secrets available")
+
 def initialize_session_state():
     """Initialisiert die Session-Variablen, wenn sie noch nicht existieren."""
     # Separate Chat-Historien für die beiden Modi
