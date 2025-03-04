@@ -36,3 +36,6 @@ test_chatbot.py
 
 # Lokale Vektordatenbank (nicht mehr benötigt mit Pinecone)
 data/vectorstore/ 
+
+# Regierungsprogramm
+data/Regierungsprogramm_2025.pdf 
