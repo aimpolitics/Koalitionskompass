@@ -6,7 +6,13 @@ __pycache__/
 *.so
 .Python
 venv/
+venv312/
+*/venv/
+*/env/
+env/
 ENV/
+*.venv/
+.venv/
 
 # Environment variables
 .env
