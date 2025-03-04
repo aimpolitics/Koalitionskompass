@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from simple_chatbot import SimpleChatbot
-from pdf_processor import PDFProcessor
+from pinecone_processor import PineconePDFProcessor
 import uvicorn
 
 app = FastAPI(title="Regierungsprogramm Chatbot API")
@@ -17,7 +17,7 @@ app.add_middleware(
 )
 
 # Chatbot initialisieren
-pdf_processor = PDFProcessor(mode="local")
+pdf_processor = PineconePDFProcessor()
 vector_store = pdf_processor.load_vector_store()
 chatbot = SimpleChatbot(vector_store)
 
