@@ -106,14 +106,43 @@ namespace = "default"
         self.initialize_pinecone()
         
         logger.info(f"Creating vector store with {len(documents)} documents")
-        # Create vector store
-        return PineconeVectorStore.from_documents(
-            documents=documents,
-            embedding=self.embeddings,
-            index_name=self.index_name,
-            namespace=self.namespace,
-            pinecone_api_key=self.api_key
-        )
+        
+        # Debug log API key presence
+        logger.info(f"API key for vector store creation: {'Present' if self.api_key else 'Missing'}")
+        
+        # Set environment variable directly to ensure it's available to PineconeVectorStore
+        original_api_key = os.environ.get("PINECONE_API_KEY", None)
+        original_environment = os.environ.get("PINECONE_ENVIRONMENT", None)
+        
+        try:
+            # Temporarily set environment variables
+            os.environ["PINECONE_API_KEY"] = self.api_key
+            os.environ["PINECONE_ENVIRONMENT"] = self.environment
+            
+            logger.info("Environment variables set for Pinecone")
+            
+            # Create vector store with environment variables set
+            vector_store = PineconeVectorStore.from_documents(
+                documents=documents,
+                embedding=self.embeddings,
+                index_name=self.index_name,
+                namespace=self.namespace
+            )
+            return vector_store
+        except Exception as e:
+            logger.error(f"Error in create_vector_store: {str(e)}", exc_info=True)
+            raise
+        finally:
+            # Restore original environment variables
+            if original_api_key:
+                os.environ["PINECONE_API_KEY"] = original_api_key
+            else:
+                os.environ.pop("PINECONE_API_KEY", None)
+            
+            if original_environment:
+                os.environ["PINECONE_ENVIRONMENT"] = original_environment
+            else:
+                os.environ.pop("PINECONE_ENVIRONMENT", None)
     
     def load_vector_store(self) -> PineconeVectorStore:
         """Load existing vector store."""
@@ -121,16 +150,102 @@ namespace = "default"
         self.initialize_pinecone()
         
         logger.info("Loading existing vector store")
-        # Load vector store
-        return PineconeVectorStore(
-            index_name=self.index_name,
-            embedding=self.embeddings,
-            namespace=self.namespace,
-            pinecone_api_key=self.api_key
-        )
+        
+        # Debug log API key presence
+        logger.info(f"API key for loading vector store: {'Present' if self.api_key else 'Missing'}")
+        
+        # Set environment variable directly to ensure it's available to PineconeVectorStore
+        original_api_key = os.environ.get("PINECONE_API_KEY", None)
+        original_environment = os.environ.get("PINECONE_ENVIRONMENT", None)
+        
+        try:
+            # Temporarily set environment variables
+            os.environ["PINECONE_API_KEY"] = self.api_key
+            os.environ["PINECONE_ENVIRONMENT"] = self.environment
+            
+            logger.info("Environment variables set for Pinecone")
+            
+            # Load vector store with environment variables set
+            vector_store = PineconeVectorStore(
+                index_name=self.index_name,
+                embedding=self.embeddings,
+                namespace=self.namespace
+            )
+            return vector_store
+        except Exception as e:
+            logger.error(f"Error in load_vector_store: {str(e)}", exc_info=True)
+            raise
+        finally:
+            # Restore original environment variables
+            if original_api_key:
+                os.environ["PINECONE_API_KEY"] = original_api_key
+            else:
+                os.environ.pop("PINECONE_API_KEY", None)
+            
+            if original_environment:
+                os.environ["PINECONE_ENVIRONMENT"] = original_environment
+            else:
+                os.environ.pop("PINECONE_ENVIRONMENT", None)
     
     def process_pdf(self) -> PineconeVectorStore:
         """Process PDF and return vector store."""
         documents = self.load_and_process_pdf()
         vector_store = self.create_vector_store(documents)
         return vector_store 
+
+# Custom exception for Pinecone connection issues
+class PineconeConnectionError(Exception):
+    """Exception raised for Pinecone connection errors."""
+    pass
+
+def initialize_pinecone():
+    """Initialize Pinecone and return a vector store.
+    
+    This function initializes the Pinecone client, checks if the index exists,
+    and returns a vector store instance.
+    
+    Returns:
+        PineconeVectorStore: An initialized vector store.
+        
+    Raises:
+        ValueError: If API key or environment is missing.
+        PineconeConnectionError: If there's an issue connecting to Pinecone.
+    """
+    processor = PineconePDFProcessor()
+    try:
+        processor.initialize_pinecone()
+        return processor.load_vector_store()
+    except Exception as e:
+        if "API key is missing" in str(e) or "environment is missing" in str(e):
+            raise ValueError(str(e))
+        else:
+            raise PineconeConnectionError(f"Failed to connect to Pinecone: {str(e)}")
+
+def create_embeddings(documents):
+    """Create embeddings for the given documents and store them in Pinecone.
+    
+    Args:
+        documents: List of documents to process
+        
+    Returns:
+        PineconeVectorStore: Vector store with the embeddings
+    """
+    processor = PineconePDFProcessor()
+    return processor.create_vector_store(documents)
+
+def count_documents():
+    """Count the number of documents/vectors in the Pinecone index.
+    
+    Returns:
+        int: Number of vectors in the index
+    """
+    try:
+        processor = PineconePDFProcessor()
+        processor.initialize_pinecone()
+        index = processor.pc.Index(processor.index_name)
+        stats = index.describe_index_stats()
+        namespace_stats = stats.namespaces.get(processor.namespace, {})
+        return namespace_stats.get('vector_count', 0)
+    except Exception as e:
+        logger.error(f"Error counting documents: {str(e)}")
+        return 0 

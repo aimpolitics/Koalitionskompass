@@ -261,18 +261,25 @@ def main():
     else:
         st.caption("Sie sind im Modus 'Einfache Sprache'")
     
-    # Chat Interface basierend auf aktivem Tab rendern
-    if st.session_state.active_tab == "standard":
-        render_chat_interface(simple_language=False)
-    else:
-        render_chat_interface(simple_language=True)
+    # Chat Container erstellen - wir packen das Chat Interface in ein Container,
+    # damit es in der Rangfolge vor dem Footer erscheint
+    chat_container = st.container()
     
     # Reset-Button für den aktuellen Chat
     st.button("Aktuellen Chat zurücksetzen", on_click=reset_current_chat, use_container_width=True)
     
-    # Footer
-    st.markdown("---")
-    st.markdown("© 2023 AimPolitics | Koalitionskompass")
+    # Footer - jetzt am Ende, nach dem Chat-Container
+    footer_container = st.container()
+    with footer_container:
+        st.markdown("---")
+        st.markdown("© 2023 AimPolitics | Koalitionskompass")
+    
+    # Chat Interface innerhalb des Containers rendern
+    with chat_container:
+        if st.session_state.active_tab == "standard":
+            render_chat_interface(simple_language=False)
+        else:
+            render_chat_interface(simple_language=True)
 
 if __name__ == "__main__":
     main()
