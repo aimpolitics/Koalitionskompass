@@ -33,9 +33,23 @@ def initialize_session_state():
     
     if "chatbot" not in st.session_state:
         try:
-            st.session_state.chatbot = ChatBot(st.session_state.vector_store)
+            # Use efficient retriever by default (integrated embedding)
+            logger.info("Initializing ChatBot with efficient retriever")
+            
+            # Ensure the vector store exists
+            if "vector_store" not in st.session_state or st.session_state.vector_store is None:
+                logger.warning("Vector store not initialized, initializing now")
+                ensure_vectorstore_exists()
+            
+            if "vector_store" in st.session_state and st.session_state.vector_store is not None:
+                st.session_state.chatbot = ChatBot(st.session_state.vector_store, use_efficient_retriever=True)
+                logger.info("ChatBot with efficient retriever initialized successfully")
+            else:
+                raise ValueError("Vector store initialization failed")
+                
         except ValueError as e:
             st.error(f"Fehler bei der Initialisierung des Standard-Chatbots: {str(e)}")
+            logger.error(f"Error initializing ChatBot: {str(e)}")
             st.warning("""
             ## OpenAI API-Schlüssel fehlt oder ist ungültig
             
@@ -51,9 +65,19 @@ def initialize_session_state():
             ### Für lokale Entwicklung:
             Erstellen Sie eine `.env`-Datei oder `.streamlit/secrets.toml` mit der gleichen Konfiguration.
             """)
-            st.session_state.chatbot = None
+            
+            # Fall back to standard retriever if efficient retriever fails
+            try:
+                logger.info("Trying to initialize ChatBot with standard retriever")
+                st.session_state.chatbot = ChatBot(st.session_state.vector_store, use_efficient_retriever=False)
+                logger.info("ChatBot with standard retriever initialized successfully")
+            except Exception as fallback_error:
+                logger.error(f"Error initializing ChatBot with standard retriever: {str(fallback_error)}")
+                st.session_state.chatbot = None
+                
         except Exception as e:
             st.error(f"Unerwarteter Fehler bei der Initialisierung des Standard-Chatbots: {str(e)}")
+            logger.error(f"Unexpected error initializing ChatBot: {str(e)}")
             st.session_state.chatbot = None
     
     if "simple_chatbot" not in st.session_state:
@@ -83,24 +107,6 @@ def initialize_session_state():
     
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = "standard"
-
-def format_source(source):
-    """Formatiert eine Quelle für die Anzeige."""
-    try:
-        if isinstance(source, dict):
-            # Wenn die Quelle ein Dictionary ist
-            page = source.get("page", "Unbekannte Seite")
-            text = source.get("text", "")
-            return f"<strong>Seite {page}:</strong> {text[:150]}..."
-        elif isinstance(source, str):
-            # Wenn die Quelle ein String ist
-            return source
-        else:
-            # Fallback für unerwartete Datentypen
-            return str(source)
-    except Exception as e:
-        # Bei Fehlern geben wir einen Standardtext zurück
-        return "Quelle konnte nicht formatiert werden"
 
 def render_chat_interface(simple_language=False):
     """Rendert das Chat-Interface je nach ausgewähltem Modus"""
@@ -150,7 +156,7 @@ def render_chat_interface(simple_language=False):
                 # Antwort vom Chatbot
                 response = chatbot.get_response(user_input, simple_language=simple_language)
                 
-                # Antwort anzeigen
+                # Antwort anzeigen - now directly using the markdown-formatted response
                 message_placeholder.markdown(response)
                 
                 # Speichere Antwort in der richtigen Chat-Historie
@@ -183,44 +189,60 @@ def ensure_vectorstore_exists():
     try:
         # Use our singleton pattern to get the vector store instance
         # This will now use the integrated embedding approach
+        logger.info("Initializing vector store with integrated embedding")
         vector_store = get_vector_store_instance()
+        
+        # Store in session state
+        st.session_state.vector_store = vector_store
+        logger.info("Vector store initialized successfully")
+        
         st.success("Verbindung zur Pinecone-Vektordatenbank hergestellt!")
         return vector_store
     except ValueError as e:
         if "API key is missing" in str(e) or "environment is missing" in str(e):
             # Special handling for API key issues
             st.error("Fehler: Pinecone API-Schlüssel oder Umgebungsvariablen fehlen")
+            logger.error(f"Pinecone configuration error: {str(e)}")
             st.warning("""
             ## Pinecone API-Konfiguration fehlt
+            
+            Bitte stellen Sie sicher, dass Sie Ihre Pinecone API-Konfiguration korrekt eingerichtet haben:
             
             ### Für Streamlit Cloud:
             Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
             ```toml
             [pinecone]
             api_key = "Ihr-Pinecone-API-Schlüssel"
-            environment = "Ihre-Pinecone-Region"
-            index_name = "koalitionskompass"
-            namespace = "default"
+            environment = "Ihre-Pinecone-Umgebung"
+            index_name = "Ihr-Index-Name"
+            namespace = "Ihr-Namespace"
             ```
             
             ### Für lokale Entwicklung:
             Erstellen Sie eine `.env`-Datei oder `.streamlit/secrets.toml` mit der gleichen Konfiguration.
             """)
-            st.stop()
+        elif "does not exist" in str(e):
+            # Special handling for missing index
+            st.error(f"Fehler: Pinecone-Index existiert nicht: {str(e)}")
+            logger.error(f"Pinecone index error: {str(e)}")
+            st.warning("""
+            ## Pinecone-Index existiert nicht
+            
+            Der angegebene Pinecone-Index existiert nicht. Bitte überprüfen Sie, ob Sie den richtigen Index-Namen angegeben haben.
+            """)
         else:
-            # General error handling
-            st.error(f"Fehler beim Verbinden mit der Pinecone-Vektordatenbank: {str(e)}")
-            st.info("Bitte stellen Sie sicher, dass die Pinecone-Datenbank bereits erstellt wurde.")
-            st.info("Führen Sie lokal 'python create_vectorstore.py' aus, um die Datenbank zu erstellen.")
-            st.stop()
-    except PineconeConnectionError as e:
-        logger.error(f"Pinecone connection error: {str(e)}")
-        st.error(f"Fehler bei der Verbindung zur Pinecone-Vektordatenbank: {str(e)}")
-        st.stop()
+            # Generic error handling
+            st.error(f"Fehler bei der Verbindung zur Pinecone-Vektordatenbank: {str(e)}")
+            logger.error(f"Pinecone vector store error: {str(e)}")
+            
+        st.session_state.vector_store = None
+        return None
     except Exception as e:
-        st.error(f"Unerwarteter Fehler: {str(e)}")
-        st.info("Bitte überprüfen Sie die Logs für weitere Details.")
-        st.stop()
+        # Generic error handling
+        st.error(f"Unerwarteter Fehler bei der Verbindung zur Pinecone-Vektordatenbank: {str(e)}")
+        logger.error(f"Unexpected error initializing vector store: {str(e)}")
+        st.session_state.vector_store = None
+        return None
 
 def main():
     # Titel ohne Logo
@@ -236,14 +258,47 @@ def main():
         *Bitte beachten Sie: Der Chatbot kann unvollständige oder falsche Antworten geben und in manchen Fällen halluzinieren. Überprüfen Sie bitte immer die angezeigten Quellenangaben.*
     """)
     
-    # Stellen Sie sicher, dass die Vektordatenbank existiert
-    # Dies muss vor der Initialisierung des ChatBots geschehen
-    vector_store = ensure_vectorstore_exists()
-    if vector_store:
-        st.session_state.vector_store = vector_store
+    # Initialize session variables that don't depend on the vector store
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
     
-    # Session State initialisieren (inklusive Chatbot)
-    initialize_session_state()
+    if "simple_chat_history" not in st.session_state:
+        st.session_state.simple_chat_history = []
+    
+    if "active_tab" not in st.session_state:
+        st.session_state.active_tab = "standard"
+    
+    # Ensure the vector store exists - must happen before chatbot initialization
+    vector_store = ensure_vectorstore_exists()
+    
+    # Initialize chatbot only if vector store is available
+    if "chatbot" not in st.session_state:
+        if vector_store is not None:
+            try:
+                logger.info("Initializing ChatBot with efficient retriever")
+                st.session_state.chatbot = ChatBot(vector_store, use_efficient_retriever=True)
+                logger.info("ChatBot with efficient retriever initialized successfully")
+            except Exception as e:
+                logger.error(f"Error initializing ChatBot with efficient retriever: {str(e)}")
+                try:
+                    logger.info("Falling back to standard retriever")
+                    st.session_state.chatbot = ChatBot(vector_store, use_efficient_retriever=False)
+                    logger.info("ChatBot with standard retriever initialized successfully")
+                except Exception as fallback_error:
+                    logger.error(f"Error initializing ChatBot with standard retriever: {str(fallback_error)}")
+                    st.session_state.chatbot = None
+        else:
+            logger.error("Cannot initialize chatbot: vector store is None")
+            st.session_state.chatbot = None
+    
+    # Initialize simple chatbot if needed
+    if "simple_chatbot" not in st.session_state:
+        try:
+            st.session_state.simple_chatbot = SimpleChatbot()
+            logger.info("SimpleChatbot initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing SimpleChatbot: {str(e)}")
+            st.session_state.simple_chatbot = None
     
     # Einfache Modusauswahl mit Buttons
     col1, col2 = st.columns(2)

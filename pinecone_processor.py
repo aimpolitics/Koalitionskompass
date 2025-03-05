@@ -26,6 +26,7 @@ logger.info(f"Pinecone configuration from config.py: API Key: {'Found' if pineco
 # Global singleton instances
 _pinecone_instance = None
 _vector_store_instance = None
+_efficient_retriever_instance = None
 
 # Create a passthrough embedding class for use with integrated embedding
 class PassthroughEmbeddings(Embeddings):
@@ -253,4 +254,35 @@ def count_documents():
         return total_count
     except Exception as e:
         logger.error(f"Error counting documents: {str(e)}")
-        return 0 
+        return 0
+
+def get_efficient_retriever_instance(top_k=3):
+    """
+    Get or create the efficient retriever singleton instance.
+    This uses Pinecone's integrated embedding API for more efficient retrieval.
+    
+    Args:
+        top_k: Number of results to return from each query
+        
+    Returns:
+        An instance of EfficientPineconeRetriever
+    """
+    global _efficient_retriever_instance
+    
+    if _efficient_retriever_instance is None:
+        try:
+            # Import here to avoid circular imports
+            from efficient_retriever import EfficientPineconeRetriever
+            
+            logger.info(f"Creating efficient retriever instance with top_k={top_k}")
+            _efficient_retriever_instance = EfficientPineconeRetriever(
+                index_name=PINECONE_INDEX_NAME,
+                namespace=PINECONE_NAMESPACE,
+                top_k=top_k
+            )
+            logger.info("Efficient retriever instance created successfully")
+        except Exception as e:
+            logger.error(f"Error creating efficient retriever instance: {str(e)}")
+            raise
+    
+    return _efficient_retriever_instance 

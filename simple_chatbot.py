@@ -53,7 +53,32 @@ For local development, either use .streamlit/secrets.toml or set the OPENAI_API_
             logger.error(f"Error getting context from query: {str(e)}")
             return "", []
     
-    def get_response(self, query):
+    def format_response(self, answer, sources):
+        """Format the response with answer and sources in proper markdown."""
+        # Format the main answer
+        formatted_response = f"{answer}\n\n"
+        
+        # Add sources section if there are any sources
+        if sources:
+            formatted_response += "---\n\n"
+            formatted_response += "### 📚 Quellen\n\n"
+            
+            for i, source in enumerate(sources, 1):
+                page = source.get('page', 'N/A')
+                content = source.get('content', '')
+                doc_source = source.get('source', 'Unbekannt')
+                
+                # Extract just the filename from the document source path if it exists
+                if doc_source and '/' in doc_source:
+                    doc_source = doc_source.split('/')[-1]
+                
+                # Format source with markdown
+                formatted_response += f"**[{i}] Seite {page}** - *{doc_source}*\n"
+                formatted_response += f"> {content}\n\n"
+                
+        return formatted_response
+    
+    def get_response(self, query, simple_language=False):
         """Get response for user query."""
         try:
             logger.info(f"Getting response for: {query}")
@@ -63,10 +88,7 @@ For local development, either use .streamlit/secrets.toml or set the OPENAI_API_
             
             if not context:
                 logger.warning("No context found for query")
-                return {
-                    "answer": "Ich konnte leider keine relevanten Informationen zu Ihrer Anfrage finden.",
-                    "sources": []
-                }
+                return "Ich konnte leider keine relevanten Informationen zu Ihrer Anfrage finden."
             
             # Add the user's message to history
             self.add_to_history("user", query)
@@ -74,14 +96,13 @@ For local development, either use .streamlit/secrets.toml or set the OPENAI_API_
             # Create the system message with context
             system_message = {
                 "role": "system", 
-                "content": f"""Du bist ein hilfreicher Assistent, der Fragen zum Koalitionsvertrag der Bundesregierung beantwortet.
+                "content": f"""{SYSTEM_PROMPT}
+
 Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
 
 {context}
 
-Falls du die Antwort nicht in den bereitgestellten Informationen findest, sage ehrlich, dass du es nicht weißt.
-Gib immer eine sachliche und objektive Antwort. Beziehe dich nur auf Fakten aus dem Text.
-Strukturiere deine Antwort in klare Absätze mit kurzen Sätzen für bessere Lesbarkeit.
+{("Verwende einfache Sprache ohne Fremdwörter oder Fachbegriffe. Erkläre komplexe Konzepte in einfachen Worten und verwende kurze Sätze." if simple_language else "")}
 """
             }
             
@@ -145,16 +166,11 @@ Strukturiere deine Antwort in klare Absätze mit kurzen Sätzen für bessere Les
                     }
                     sources.append(source)
             
-            return {
-                "answer": answer,
-                "sources": sources
-            }
+            # Instead of returning a dictionary, return a formatted markdown string
+            return self.format_response(answer, sources)
         except Exception as e:
             logger.error(f"Error getting response: {str(e)}")
-            return {
-                "answer": f"Ein Fehler ist aufgetreten: {str(e)}",
-                "sources": []
-            }
+            return f"Ein Fehler ist aufgetreten: {str(e)}"
     
     def clear_history(self):
         """Clear chat history."""
