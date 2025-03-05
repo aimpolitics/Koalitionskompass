@@ -101,7 +101,7 @@ class ChatBot:
             
             for i, source in enumerate(sources, 1):
                 page = source.get('page', 'N/A')
-                content = source.get('content', '')[:200]  # Limit content length
+                content = source.get('content', '')  # Get full content without truncation
                 doc_source = source.get('source', 'Unbekannt')
                 
                 # Extract just the filename from the document source path if it exists
@@ -126,10 +126,6 @@ class ChatBot:
                 content = ' '.join([line.strip() for line in content.split('\n') if line.strip()])
                 # Remove any page numbers at the beginning of the content
                 content = re.sub(r'^\d+\s+', '', content)
-                
-                # Truncate at a word boundary if too long
-                if len(content) > 200:
-                    content = content[:200].rsplit(' ', 1)[0] + '...'
                 
                 # Format source with markdown
                 formatted_response += f"**[{i}] Seite {page}** - *{doc_source}*\n"

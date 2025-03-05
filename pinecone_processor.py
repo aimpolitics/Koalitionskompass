@@ -10,7 +10,6 @@ from pinecone import Pinecone, PodSpec
 import os
 import logging
 import streamlit as st
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -123,6 +122,8 @@ class PineconePDFProcessor:
         try:
             # Initialize Pinecone (using singleton pattern)
             self.pc = get_pinecone_instance()
+            # Initialize the text processor
+            self.text_processor = TextProcessor()
             logger.info("PineconePDFProcessor initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing PineconePDFProcessor: {str(e)}")
@@ -136,12 +137,9 @@ class PineconePDFProcessor:
             loader = PyPDFLoader(PDF_PATH)
             documents = loader.load()
             
-            # Split the documents into chunks
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=500,
-                chunk_overlap=50
-            )
-            return text_splitter.split_documents(documents)
+            # Use the TextProcessor to clean and split documents at sentence boundaries
+            logger.info("Processing documents with TextProcessor")
+            return self.text_processor.process_documents(documents)
         except Exception as e:
             logger.error(f"Error processing PDF: {str(e)}")
             raise

@@ -59,8 +59,8 @@ if not OPENAI_API_KEY:
 # PDF and Database Paths
 PDF_PATH = "data/Regierungsprogramm_2025.pdf"
 DB_PATH = "data/vectorstore"
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = 750
+CHUNK_OVERLAP = 150
 
 # Confirm the PDF path exists
 if not os.path.exists(PDF_PATH):
@@ -81,7 +81,7 @@ if not PINECONE_ENVIRONMENT:
     logger.warning("Pinecone environment is missing! Application will not function correctly.")
 
 # OpenAI Configuration
-MODEL_NAME = "gpt-3.5-turbo"
+MODEL_NAME = "gpt-4o-mini-2024-07-18"
 TEMPERATURE = 0.7
 MAX_TOKENS = 1000
 

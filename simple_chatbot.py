@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from langchain_pinecone import PineconeVectorStore
-from config import OPENAI_API_KEY, SYSTEM_PROMPT
+from config import OPENAI_API_KEY, SYSTEM_PROMPT, MODEL_NAME
 from pinecone_processor import get_vector_store_instance
 from typing import List, Dict
 
@@ -118,7 +118,7 @@ Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
             
             # Generate response
             response = client.chat.completions.create(
-                model="gpt-4o-mini-2024-07-18",
+                model=MODEL_NAME,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1000
@@ -146,10 +146,6 @@ Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
                     content = ' '.join([line.strip() for line in content.split('\n') if line.strip()])
                     # Remove any page numbers at the beginning of the content
                     content = re.sub(r'^\d+\s+', '', content)
-                    
-                    # Truncate at a word boundary if too long
-                    if len(content) > 200:
-                        content = content[:200].rsplit(' ', 1)[0] + '...'
                     
                     # Format page number as integer if possible
                     page = doc.metadata.get('page', None)
