@@ -1,8 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import warnings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_pinecone import PineconeVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
 from config import PDF_PATH, PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME, PINECONE_NAMESPACE
 from text_processor import TextProcessor
 from pinecone import Pinecone, PodSpec
@@ -25,6 +26,22 @@ logger.info(f"Pinecone configuration from config.py: API Key: {'Found' if pineco
 # Global singleton instances
 _pinecone_instance = None
 _vector_store_instance = None
+
+# Create a passthrough embedding class for use with integrated embedding
+class PassthroughEmbeddings(Embeddings):
+    """A dummy embeddings class for use with Pinecone integrated embedding.
+    This class implements the Embeddings interface but doesn't actually compute embeddings,
+    as Pinecone will handle the embedding process internally."""
+    
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """This method is not used with Pinecone integrated embedding."""
+        # Return placeholder values - these aren't used since Pinecone does the embedding
+        return [[0.0] * 1536] * len(texts)
+    
+    def embed_query(self, text: str) -> List[float]:
+        """This method is not used with Pinecone integrated embedding."""
+        # Return placeholder values - these aren't used since Pinecone does the embedding
+        return [0.0] * 1536
 
 def get_pinecone_instance():
     """Get or create the Pinecone singleton instance."""
@@ -75,7 +92,8 @@ def get_vector_store_instance():
             # Create a PineconeVectorStore instance configured for integrated embedding
             _vector_store_instance = PineconeVectorStore(
                 index=index,
-                text_field="text"  # Field containing the text to be embedded
+                embedding=PassthroughEmbeddings(),  # Use our dummy embeddings class
+                namespace=PINECONE_NAMESPACE
             )
             
             logger.info("Vector store instance created successfully")
@@ -178,9 +196,12 @@ class PineconePDFProcessor:
                 )
             
             # Create and return the vector store interface
+            # Use the correct initialization parameters for PineconeVectorStore
+            # Remove the text_field parameter as it's not supported
             vector_store = PineconeVectorStore(
                 index=index,
-                text_field="text"
+                embedding=PassthroughEmbeddings(),
+                namespace=PINECONE_NAMESPACE
             )
             
             return vector_store
