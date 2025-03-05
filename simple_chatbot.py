@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import logging
+import re
 from langchain_pinecone import PineconeVectorStore
 from config import OPENAI_API_KEY, SYSTEM_PROMPT
 from pinecone_processor import get_vector_store_instance
@@ -80,6 +81,7 @@ Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
 
 Falls du die Antwort nicht in den bereitgestellten Informationen findest, sage ehrlich, dass du es nicht weißt.
 Gib immer eine sachliche und objektive Antwort. Beziehe dich nur auf Fakten aus dem Text.
+Strukturiere deine Antwort in klare Absätze mit kurzen Sätzen für bessere Lesbarkeit.
 """
             }
             
@@ -95,7 +97,7 @@ Gib immer eine sachliche und objektive Antwort. Beziehe dich nur auf Fakten aus 
             
             # Generate response
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o-mini-2024-07-18",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1000
@@ -107,14 +109,39 @@ Gib immer eine sachliche und objektive Antwort. Beziehe dich nur auf Fakten aus 
             # Add the assistant's response to history
             self.add_to_history("assistant", answer)
             
-            # Extract source information
+            # Clean and extract source information
             sources = []
             for doc in source_docs:
                 if hasattr(doc, 'metadata') and doc.metadata:
+                    # Clean up the content by replacing Unicode bullet points and formatting
+                    content = doc.page_content
+                    # Replace Unicode bullet points with dashes
+                    content = content.replace('\uf0b7', '-')
+                    # Replace Unicode bullets with normal dash-space
+                    content = content.replace('\no', '- ')
+                    # Also handle standalone 'o ' bullets
+                    content = content.replace('o ', '- ')
+                    # Clean up excessive newlines
+                    content = ' '.join([line.strip() for line in content.split('\n') if line.strip()])
+                    # Remove any page numbers at the beginning of the content
+                    content = re.sub(r'^\d+\s+', '', content)
+                    
+                    # Truncate at a word boundary if too long
+                    if len(content) > 200:
+                        content = content[:200].rsplit(' ', 1)[0] + '...'
+                    
+                    # Format page number as integer if possible
+                    page = doc.metadata.get('page', None)
+                    if page is not None:
+                        try:
+                            page = int(page)
+                        except (ValueError, TypeError):
+                            pass  # Keep as is if not convertible
+                    
                     source = {
-                        'page': doc.metadata.get('page', None),
+                        'page': page,
                         'source': doc.metadata.get('source', None),
-                        'content': doc.page_content[:200] + '...' if len(doc.page_content) > 200 else doc.page_content
+                        'content': content
                     }
                     sources.append(source)
             

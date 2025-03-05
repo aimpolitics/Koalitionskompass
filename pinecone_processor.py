@@ -33,15 +33,24 @@ class PassthroughEmbeddings(Embeddings):
     This class implements the Embeddings interface but doesn't actually compute embeddings,
     as Pinecone will handle the embedding process internally."""
     
+    def __init__(self, dimension: int = 1024):
+        """Initialize with the dimension matching your Pinecone index.
+        
+        Args:
+            dimension: The dimension of your Pinecone index. Default is 1024 for
+                       multilingual-e5-large model used in integrated embedding.
+        """
+        self.dimension = dimension
+    
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """This method is not used with Pinecone integrated embedding."""
         # Return placeholder values - these aren't used since Pinecone does the embedding
-        return [[0.0] * 1536] * len(texts)
+        return [[0.0] * self.dimension] * len(texts)
     
     def embed_query(self, text: str) -> List[float]:
         """This method is not used with Pinecone integrated embedding."""
         # Return placeholder values - these aren't used since Pinecone does the embedding
-        return [0.0] * 1536
+        return [0.0] * self.dimension
 
 def get_pinecone_instance():
     """Get or create the Pinecone singleton instance."""
