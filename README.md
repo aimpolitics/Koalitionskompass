@@ -45,18 +45,38 @@ pip install -r requirements.txt
 
 Dieser Vorgang kann einige Minuten dauern, da die Pakete und ihre Abhängigkeiten heruntergeladen und installiert werden.
 
-### 5. Umgebungsvariablen konfigurieren
+### 5. API-Schlüssel konfigurieren
 
-Sie benötigen API-Schlüssel für OpenAI und Pinecone. Erstellen Sie eine `.env` Datei im Projektverzeichnis mit folgenden Inhalten:
+Es gibt zwei Möglichkeiten, die benötigten API-Schlüssel zu konfigurieren:
+
+#### Option A: Streamlit Secrets (empfohlen für Deployment)
+
+Erstellen Sie eine `.streamlit/secrets.toml` Datei im Projektverzeichnis:
+
+```toml
+[openai]
+api_key = "ihr-openai-api-key"
+
+[pinecone]
+api_key = "ihr-pinecone-api-key"
+environment = "ihre-pinecone-environment" # z.B. "gcp-starter" oder "us-east1-gcp"
+index_name = "koalitionskompass"
+namespace = "default"
+```
+
+Bei Deployment auf Streamlit Cloud werden diese Werte in der Streamlit Cloud UI konfiguriert (siehe Abschnitt "Deployment-Optionen").
+
+#### Option B: .env Datei (für lokale Entwicklung)
+
+Alternativ können Sie eine `.env` Datei im Projektverzeichnis erstellen:
 
 ```
 OPENAI_API_KEY=ihr-openai-api-key
 PINECONE_API_KEY=ihr-pinecone-api-key
 PINECONE_ENVIRONMENT=ihre-pinecone-environment (z.B. us-east-1)
-PINECONE_INDEX_NAME=ihr-pinecone-index-name
+PINECONE_INDEX_NAME=koalitionskompass
+PINECONE_NAMESPACE=default
 ```
-
-Alternativ können Sie diese Konfiguration auch über Streamlit Secrets vornehmen (siehe Schritt 7).
 
 ### 6. Pinecone Einrichtung (falls nicht vorhanden)
 
@@ -72,22 +92,7 @@ Falls Sie noch keinen Pinecone-Index haben, befolgen Sie diese Schritte:
 
 Für detailliertere Anweisungen siehe die Datei `PINECONE_SETUP.md` im Repository.
 
-### 7. Streamlit Secrets konfigurieren (alternative zu .env)
-
-Erstellen Sie eine Datei `.streamlit/secrets.toml` mit folgendem Inhalt:
-
-```toml
-[pinecone]
-api_key = "ihr-pinecone-api-key"
-environment = "ihre-pinecone-environment"
-index_name = "ihr-pinecone-index-name"
-namespace = "koalitionskompass"
-
-[openai]
-api_key = "ihr-openai-api-key"
-```
-
-### 8. Vektordatenbank erstellen (wenn noch nicht vorhanden)
+### 7. Vektordatenbank erstellen (wenn noch nicht vorhanden)
 
 Wenn Sie das Projekt zum ersten Mal ausführen, müssen Sie die PDF-Datei in die Vektordatenbank laden:
 
@@ -102,7 +107,7 @@ python create_vectorstore.py
 
 Dieser Prozess extrahiert Text aus dem PDF, teilt ihn in Chunks auf, erstellt Embeddings und speichert alles in Pinecone.
 
-### 9. Anwendung starten
+### 8. Anwendung starten
 
 ```bash
 streamlit run app.py
@@ -115,7 +120,7 @@ http://localhost:8501
 
 Die App sollte nun laufen und Sie können Fragen zum Regierungsprogramm stellen.
 
-### 10. Fehlerbehebung
+### 9. Fehlerbehebung
 
 #### ModuleNotFoundError
 Wenn Fehler wie `ModuleNotFoundError: No module named 'xyz'` auftreten:

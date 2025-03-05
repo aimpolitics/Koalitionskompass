@@ -1,25 +1,62 @@
 import os
 from dotenv import load_dotenv
 import streamlit as st
+import logging
 
-# Load environment variables
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables (only for local development)
 load_dotenv()
 
 # Funktion zum Lesen von Konfigurationswerten aus verschiedenen Quellen
 def get_config(key, default=None, section=None):
-    # Versuche, den Wert aus Streamlit-Secrets zu lesen
-    if section and hasattr(st, "secrets") and section in st.secrets and key in st.secrets[section]:
-        return st.secrets[section][key]
-    # Versuche, den Wert aus Umgebungsvariablen zu lesen
+    """
+    Get configuration value from different sources:
+    1. First try Streamlit Secrets (preferred for deployment)
+    2. Then try environment variables (fallback for local dev)
+    3. Finally use default value if provided
+    """
+    # Log access attempt
+    logger.info(f"Accessing config: section={section}, key={key}")
+    
+    # 1. Try Streamlit Secrets first (recommended for Streamlit Cloud)
+    if section and hasattr(st, "secrets"):
+        # Check if section exists in secrets
+        if section in st.secrets:
+            # Check if key exists in section
+            if key in st.secrets[section]:
+                logger.info(f"Found {key} in st.secrets[{section}]")
+                return st.secrets[section][key]
+            else:
+                logger.warning(f"Key {key} not found in st.secrets[{section}]")
+        else:
+            logger.warning(f"Section {section} not found in st.secrets")
+            
+            # Try flat structure (non-sectioned) if section not found
+            flat_key = f"{section}_{key}".lower()
+            if flat_key in st.secrets:
+                logger.info(f"Found {flat_key} in flat st.secrets structure")
+                return st.secrets[flat_key]
+    
+    # 2. Try environment variables
     env_key = f"{section.upper()}_{key.upper()}" if section else key.upper()
     env_value = os.getenv(env_key)
     if env_value:
+        logger.info(f"Found {env_key} in environment variables")
         return env_value
-    # Verwende den Standardwert
+    
+    # 3. Use default value
+    logger.warning(f"Using default value for {section}.{key}: {default}")
     return default
 
-# Configuration
-OPENAI_API_KEY = get_config("api_key", section="openai") or os.getenv("OPENAI_API_KEY")
+# OpenAI Configuration
+OPENAI_API_KEY = get_config("api_key", section="openai")
+if not OPENAI_API_KEY:
+    logger.warning("OpenAI API key is missing! Application will not function correctly.")
+
+# PDF and Database Paths
 PDF_PATH = "data/Regierungsprogramm_2025.pdf"
 DB_PATH = "data/vectorstore"
 CHUNK_SIZE = 1000
@@ -30,6 +67,13 @@ PINECONE_API_KEY = get_config("api_key", section="pinecone")
 PINECONE_ENVIRONMENT = get_config("environment", section="pinecone")
 PINECONE_INDEX_NAME = get_config("index_name", "koalitionskompass", section="pinecone")
 PINECONE_NAMESPACE = get_config("namespace", "default", section="pinecone")
+
+# Log Pinecone configuration (without exposing API key)
+logger.info(f"Pinecone configuration loaded: env={PINECONE_ENVIRONMENT}, index={PINECONE_INDEX_NAME}, namespace={PINECONE_NAMESPACE}")
+if not PINECONE_API_KEY:
+    logger.warning("Pinecone API key is missing! Application will not function correctly.")
+if not PINECONE_ENVIRONMENT:
+    logger.warning("Pinecone environment is missing! Application will not function correctly.")
 
 # OpenAI Configuration
 MODEL_NAME = "gpt-3.5-turbo"

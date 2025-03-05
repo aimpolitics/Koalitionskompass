@@ -13,14 +13,34 @@ Diese Anleitung beschreibt, wie Sie den Koalitionskompass-Chatbot auf Streamlit 
 Bevor Sie die Anwendung auf Streamlit Cloud deployen, müssen Sie die Vektordatenbank lokal erstellen:
 
 1. Klonen Sie das Repository auf Ihren lokalen Computer.
-2. Erstellen Sie eine `.env` Datei mit Ihren API-Schlüsseln:
+2. Konfigurieren Sie Ihre API-Schlüssel entweder über:
+   
+   **Option A: Streamlit Secrets** (empfohlen)
    ```
+   mkdir -p .streamlit
+   ```
+
+   Erstellen Sie eine Datei `.streamlit/secrets.toml`:
+   ```toml
+   [openai]
+   api_key = "Ihr_OpenAI_API_Schlüssel"
+
+   [pinecone]
+   api_key = "Ihr_Pinecone_API_Schlüssel"
+   environment = "Ihre_Pinecone_Region"
+   index_name = "koalitionskompass"
+   namespace = "default"
+   ```
+
+   **Option B: .env Datei**
+   ```
+   OPENAI_API_KEY=Ihr_OpenAI_API_Schlüssel
    PINECONE_API_KEY=Ihr_Pinecone_API_Schlüssel
    PINECONE_ENVIRONMENT=Ihre_Pinecone_Region
    PINECONE_INDEX_NAME=koalitionskompass
    PINECONE_NAMESPACE=default
-   OPENAI_API_KEY=Ihr_OpenAI_API_Schlüssel
    ```
+
 3. Erstellen Sie eine virtuelle Umgebung und installieren Sie die Abhängigkeiten:
    ```
    python -m venv venv
@@ -45,7 +65,7 @@ Bevor Sie die Anwendung auf Streamlit Cloud deployen, müssen Sie die Vektordate
    - Wählen Sie den Branch (normalerweise "main")
    - Geben Sie den Pfad zur Hauptdatei an (in Ihrem Fall "app.py")
 
-3. **Secrets konfigurieren**:
+3. **Secrets konfigurieren** (wichtig!):
    - Klicken Sie auf "Advanced settings" > "Secrets"
    - Fügen Sie Ihre Konfigurationswerte als TOML-Format hinzu:
    ```toml
@@ -59,6 +79,8 @@ Bevor Sie die Anwendung auf Streamlit Cloud deployen, müssen Sie die Vektordate
    namespace = "default"
    ```
 
+   **Wichtig:** Die Struktur der Secrets in Streamlit Cloud muss exakt dem Format oben entsprechen. Die Anwendung erwartet diese hierarchische Struktur mit Abschnitten ([openai], [pinecone]) und den dazugehörigen Schlüssel-Wert-Paaren.
+
 4. **Deployment starten**:
    - Klicken Sie auf "Deploy"
    - Warten Sie, bis die Anwendung gebaut und gestartet ist
@@ -67,15 +89,22 @@ Bevor Sie die Anwendung auf Streamlit Cloud deployen, müssen Sie die Vektordate
    - Nach erfolgreichem Deployment erhalten Sie eine URL, unter der Ihre Anwendung erreichbar ist
    - Testen Sie die Anwendung, um sicherzustellen, dass sie korrekt auf die Pinecone-Datenbank zugreift
 
+## Fehlersuche bei Konfigurationsproblemen
+
+Wenn Ihre Anwendung auf Streamlit Cloud nicht funktioniert, prüfen Sie folgende häufige Probleme:
+
+1. **Secrets-Format überprüfen**: Stellen Sie sicher, dass die Secrets genau im oben beschriebenen Format konfiguriert sind.
+
+2. **Logs anzeigen**: In der Streamlit Cloud können Sie die Logs Ihrer Anwendung einsehen, um Fehler zu identifizieren.
+
+3. **Häufige Fehler und Lösungen**:
+   - `Pinecone API key is missing`: Überprüfen Sie, ob der API-Schlüssel korrekt in den Secrets unter `[pinecone].api_key` konfiguriert ist.
+   - `Pinecone environment is missing`: Überprüfen Sie, ob die Umgebung korrekt in den Secrets unter `[pinecone].environment` konfiguriert ist.
+   - `OpenAI API key is missing`: Überprüfen Sie, ob der API-Schlüssel korrekt in den Secrets unter `[openai].api_key` konfiguriert ist.
+
 ## Wichtige Hinweise
 
 - Die Anwendung ist so konfiguriert, dass sie **keine** neue Vektordatenbank erstellt, sondern nur auf eine bereits existierende zugreift.
 - Wenn die Verbindung zur Pinecone-Datenbank fehlschlägt, wird eine Fehlermeldung angezeigt.
 - Stellen Sie sicher, dass die Pinecone-Datenbank immer verfügbar ist, da die Anwendung ohne sie nicht funktioniert.
-- Wenn Sie Änderungen am PDF-Dokument vornehmen, müssen Sie die Vektordatenbank lokal neu erstellen und dann die Anwendung auf Streamlit Cloud neu deployen.
-
-## Fehlerbehebung
-
-- **Fehler bei der Verbindung zur Pinecone-Datenbank**: Überprüfen Sie, ob die API-Schlüssel und die Umgebungsvariablen korrekt konfiguriert sind.
-- **Keine Ergebnisse bei der Suche**: Stellen Sie sicher, dass die Vektordatenbank korrekt erstellt wurde und Daten enthält.
-- **Timeout bei der Anfrage**: Streamlit Cloud hat Zeitbeschränkungen für Anfragen. Wenn die Antwort zu lange dauert, kann es zu einem Timeout kommen. 
+- Wenn Sie Änderungen am PDF-Dokument vornehmen, müssen Sie die Vektordatenbank lokal neu erstellen und dann die Anwendung auf Streamlit Cloud neu deployen. 
