@@ -1,13 +1,13 @@
 from typing import List, Optional, Dict, Any
-import warnings
+# import warnings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_pinecone import PineconeVectorStore
-from langchain_huggingface import HuggingFaceEmbeddings
+# from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.embeddings import Embeddings
 from config import PDF_PATH, PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME, PINECONE_NAMESPACE
 from text_processor import TextProcessor
 from pinecone import Pinecone, PodSpec
-import os
+# import os
 import logging
 import streamlit as st
 

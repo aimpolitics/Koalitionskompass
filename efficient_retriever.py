@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
 from config import PINECONE_NAMESPACE, PINECONE_INDEX_NAME
-from pinecone_processor import get_pinecone_instance
+from pinecone_processor import get_pinecone_instance, PassthroughEmbeddings
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class EfficientPineconeRetriever(BaseRetriever):
     """
     Custom retriever that uses Pinecone's integrated embedding API for efficient retrieval.
-    This bypasses the need for local embeddings and directly uses Pinecone's search_records API.
+    This bypasses the need for local embeddings and directly uses Pinecone's text API.
     """
     
     def __init__(self, index_name=PINECONE_INDEX_NAME, namespace=PINECONE_NAMESPACE, top_k=3):
@@ -32,6 +32,7 @@ class EfficientPineconeRetriever(BaseRetriever):
         self._top_k = top_k
         self._pinecone_client = None
         self._index = None
+        self._embeddings = PassthroughEmbeddings(dimension=1024)
         
         # Initialize Pinecone client
         self._init_pinecone()
@@ -62,40 +63,49 @@ class EfficientPineconeRetriever(BaseRetriever):
         logger.info(f"Retrieving documents for query: '{query}' using efficient method")
         
         try:
-            # Use search_records with text input for integrated embedding
+            # Use search_records for integrated embedding as per Pinecone documentation
             search_response = self._index.search_records(
                 namespace=self._namespace,
                 query={
-                    "inputs": {"text": query},
+                    "inputs": {"text": query},  # The text query for integrated embedding
                     "top_k": self._top_k
                 },
-                # Include all fields in the response
-                fields=["text", "page", "source"]
+                fields=["text", "source", "page"]  # Specify fields to return
             )
             
-            # Extract matches from response
-            matches = search_response.get("result", {}).get("hits", [])
-            logger.info(f"Found {len(matches)} matches with efficient query")
-            
-            # Convert Pinecone matches to LangChain Document objects
+            # Process the response based on Pinecone v6.x response format
             documents = []
-            for match in matches:
-                fields = match.get("fields", {})
-                score = match.get("_score")
+            
+            # Check if we have results
+            if hasattr(search_response, 'result') and hasattr(search_response.result, 'hits') and search_response.result.hits:
+                hits = search_response.result.hits
+                logger.info(f"Found {len(hits)} hits with efficient query")
                 
-                # Create metadata dictionary
-                metadata = {
-                    "score": score,
-                    "source": fields.get("source", "Unknown"),
-                    "page": fields.get("page", "N/A")
-                }
-                
-                # Create Document object
-                doc = Document(
-                    page_content=fields.get("text", ""),
-                    metadata=metadata
-                )
-                documents.append(doc)
+                for hit in hits:
+                    # Extract metadata and score safely
+                    record_id = hit._id if hasattr(hit, '_id') else "Unknown"
+                    score = hit._score if hasattr(hit, '_score') else 0
+                    fields = hit.fields if hasattr(hit, 'fields') else {}
+                    
+                    # Create metadata dictionary for the document
+                    doc_metadata = {
+                        "score": score,
+                        "id": record_id,
+                        "source": fields.get("source", "Unknown"),
+                        "page": fields.get("page", "N/A")
+                    }
+                    
+                    # The text content should be in the fields
+                    page_content = fields.get("text", "")
+                    
+                    # Create Document object
+                    doc = Document(
+                        page_content=page_content,
+                        metadata=doc_metadata
+                    )
+                    documents.append(doc)
+            else:
+                logger.warning("No hits found in the search response")
             
             return documents
             
