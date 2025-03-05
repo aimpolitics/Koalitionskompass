@@ -12,20 +12,26 @@ logger = logging.getLogger(__name__)
 
 class ChatBot:
     def __init__(self, vector_store):
+        """Initialize ChatBot with the vector store instance.
+        
+        The vector_store now uses Pinecone's integrated embedding API, so no local
+        embedding model is required.
+        """
         self.vector_store = vector_store
         
-        # Überprüfen, ob der OpenAI API-Schlüssel vorhanden ist
+        # Check if OpenAI API key is available
         if not OPENAI_API_KEY:
-            logger.error("OpenAI API-Schlüssel fehlt")
+            logger.error("OpenAI API key is missing")
             raise ValueError(
-                "OpenAI API-Schlüssel fehlt. Bitte stellen Sie sicher, dass Sie einen gültigen "
-                "API-Schlüssel in der .streamlit/secrets.toml oder in Umgebungsvariablen konfiguriert haben."
+                "OpenAI API key is missing. Please make sure you have configured a valid "
+                "API key in .streamlit/secrets.toml or environment variables."
             )
         
         # Configure OpenAI settings
         os.environ["OPENAI_API_BASE"] = "https://oai.hconeai.com/v1"
         os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
         
+        # Initialize conversation memory
         self.memory = ConversationBufferMemory(
             memory_key="chat_history",
             return_messages=True,
@@ -33,13 +39,14 @@ class ChatBot:
         )
         
         try:
+            # Initialize language model
             llm = ChatOpenAI(
-                model_name="gpt-3.5-turbo",
-                temperature=0.7,
-                max_tokens=1000,
-                model_kwargs={"stop": None}
+                model_name=MODEL_NAME,
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS
             )
             
+            # Create conversational retrieval chain
             self.chain = ConversationalRetrievalChain.from_llm(
                 llm=llm,
                 retriever=vector_store.as_retriever(),
@@ -47,41 +54,48 @@ class ChatBot:
                 return_source_documents=True,
                 verbose=True,
                 chain_type="stuff",
-                rephrase_question=False,
                 output_key="answer"
             )
-            logger.info("ChatBot erfolgreich initialisiert")
+            logger.info("ChatBot initialized successfully")
         except Exception as e:
-            logger.error(f"Fehler bei der Initialisierung des ChatBot: {str(e)}")
-            raise ValueError(f"Fehler bei der Initialisierung des ChatBot: {str(e)}")
+            logger.error(f"Error initializing ChatBot: {str(e)}")
+            raise ValueError(f"Error initializing ChatBot: {str(e)}")
         
-    def get_response(self, query: str, simple_language=False) -> str:
-        """Get response for user query with optional simple language formatting."""
+    def get_response(self, query, simple_language=False):
+        """Get response for a user query."""
         try:
-            # Modifiziere den Prompt für einfache Sprache wenn nötig
-            prompt_to_use = f"Bitte erkläre in einfacher Sprache: {query}" if simple_language else query
+            # Send query to the chain and get response
+            logger.info(f"Getting response for query: {query}")
+            result = self.chain({"question": query})
             
-            response = self.chain.invoke({"question": prompt_to_use})
+            # Extract answer and source documents
+            answer = result.get("answer", "")
+            source_documents = result.get("source_documents", [])
             
-            # Extrahiere Antworttext und Quellen
-            answer_text = response.get("answer", "Keine Antwort gefunden.")
-            sources = [doc.page_content for doc in response.get("source_documents", [])]
+            # Extract source information
+            sources = []
+            for doc in source_documents:
+                # Extract metadata
+                metadata = doc.metadata
+                page = metadata.get("page", None)
+                
+                # Create source object
+                source = {
+                    "page": page,
+                    "content": doc.page_content,
+                    "source": metadata.get("source", None)
+                }
+                sources.append(source)
             
-            # Antwort formatieren
-            formatted_response = answer_text
-            
-            # Quellen hinzufügen, wenn vorhanden
-            if sources:
-                formatted_response += "\n\n**Quellen:**\n"
-                for source in sources:
-                    formatted_response += f"- {source}\n"
-                    
-            return formatted_response
-            
+            return {
+                "answer": answer,
+                "sources": sources
+            }
         except Exception as e:
-            logger.error(f"Error in get_response: {str(e)}")
-            return f"Entschuldigung, es gab einen Fehler bei der Verarbeitung Ihrer Anfrage: {str(e)}"
+            logger.error(f"Error getting response: {str(e)}")
+            raise
     
-    def clear_memory(self):
-        """Clear conversation memory."""
-        self.memory.clear() 
+    def clear_history(self):
+        """Clear conversation history."""
+        self.memory.clear()
+        logger.info("Conversation history cleared") 

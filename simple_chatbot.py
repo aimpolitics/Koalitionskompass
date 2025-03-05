@@ -4,7 +4,8 @@ import json
 import logging
 from langchain_pinecone import PineconeVectorStore
 from config import OPENAI_API_KEY, SYSTEM_PROMPT
-from pinecone_processor import PineconePDFProcessor
+from pinecone_processor import get_vector_store_instance
+from typing import List, Dict
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -12,9 +13,8 @@ logger = logging.getLogger(__name__)
 
 class SimpleChatbot:
     def __init__(self):
-        # Lade die Pinecone-Vektordatenbank
-        pdf_processor = PineconePDFProcessor()
-        self.vector_store = pdf_processor.load_vector_store()
+        # Use the singleton vector store instance
+        self.vector_store = get_vector_store_instance()
         
         # Check if OpenAI API key is available
         self.api_key = OPENAI_API_KEY
@@ -39,83 +39,97 @@ For local development, either use .streamlit/secrets.toml or set the OPENAI_API_
         self.history.append({"role": role, "content": content})
         
     def get_context_from_query(self, query, max_results=3):
-        """Get relevant context from vector store."""
-        results = self.vector_store.similarity_search(query, k=max_results)
-        context = "\n\n".join([doc.page_content for doc in results])
-        return context, results
+        """Get relevant context from vector store using Pinecone's integrated embedding."""
+        logger.info(f"Getting context for query: {query}")
+        try:
+            # The vector_store's similarity_search will use Pinecone's integrated embedding
+            # to convert the query to a vector on the server side
+            results = self.vector_store.similarity_search(query, k=max_results)
+            context = "\n\n".join([doc.page_content for doc in results])
+            logger.info(f"Retrieved {len(results)} documents from vector store")
+            return context, results
+        except Exception as e:
+            logger.error(f"Error getting context from query: {str(e)}")
+            return "", []
     
     def get_response(self, query):
         """Get response for user query."""
         try:
-            # Get relevant context
-            context, sources = self.get_context_from_query(query)
+            logger.info(f"Getting response for: {query}")
             
-            # Add user query to history
+            # Get relevant context from the vector store
+            context, source_docs = self.get_context_from_query(query)
+            
+            if not context:
+                logger.warning("No context found for query")
+                return {
+                    "answer": "Ich konnte leider keine relevanten Informationen zu Ihrer Anfrage finden.",
+                    "sources": []
+                }
+            
+            # Add the user's message to history
             self.add_to_history("user", query)
             
-            # Prepare messages
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT + f"\nKontext: {context}"}
-            ] + self.history
-            
-            # Check if API key is valid before making API call
-            if not self.api_key:
-                return {
-                    "answer": "Fehler: OpenAI API-Schlüssel fehlt. Bitte konfigurieren Sie den API-Schlüssel in den Streamlit Secrets.",
-                    "sources": []
-                }
-            
-            # Make direct API call
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}"
+            # Create the system message with context
+            system_message = {
+                "role": "system", 
+                "content": f"""Du bist ein hilfreicher Assistent, der Fragen zum Koalitionsvertrag der Bundesregierung beantwortet.
+Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
+
+{context}
+
+Falls du die Antwort nicht in den bereitgestellten Informationen findest, sage ehrlich, dass du es nicht weißt.
+Gib immer eine sachliche und objektive Antwort. Beziehe dich nur auf Fakten aus dem Text.
+"""
             }
             
-            payload = {
-                "model": "gpt-3.5-turbo",
-                "messages": messages,
-                "temperature": 0.7,
-                "max_tokens": 1000
-            }
+            # Create messages array
+            messages = [system_message] + self.history
             
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload
+            # Create a client for the OpenAI API
+            import openai
+            client = openai.OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url
             )
             
-            # Check if request was successful
-            if response.status_code == 200:
-                response_data = response.json()
-                answer = response_data["choices"][0]["message"]["content"]
-                
-                # Add response to history
-                self.add_to_history("assistant", answer)
-                
-                return {
-                    "answer": answer,
-                    "sources": [doc.page_content for doc in sources]
-                }
-            elif response.status_code == 401:
-                logger.error(f"Authentication error with OpenAI API: {response.text}")
-                return {
-                    "answer": "Fehler: Die Authentifizierung mit der OpenAI API ist fehlgeschlagen. Bitte überprüfen Sie Ihren API-Schlüssel.",
-                    "sources": []
-                }
-            else:
-                logger.error(f"API Error: {response.status_code}, {response.text}")
-                return {
-                    "answer": f"API-Fehler: {response.status_code}. Bitte versuchen Sie es später erneut.",
-                    "sources": []
-                }
-                
-        except Exception as e:
-            logger.error(f"Error in get_response: {str(e)}")
+            # Generate response
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            # Extract the assistant's message
+            answer = response.choices[0].message.content
+            
+            # Add the assistant's response to history
+            self.add_to_history("assistant", answer)
+            
+            # Extract source information
+            sources = []
+            for doc in source_docs:
+                if hasattr(doc, 'metadata') and doc.metadata:
+                    source = {
+                        'page': doc.metadata.get('page', None),
+                        'source': doc.metadata.get('source', None),
+                        'content': doc.page_content[:200] + '...' if len(doc.page_content) > 200 else doc.page_content
+                    }
+                    sources.append(source)
+            
             return {
-                "answer": f"Es ist ein Fehler aufgetreten: {str(e)}. Bitte versuchen Sie es später erneut.",
+                "answer": answer,
+                "sources": sources
+            }
+        except Exception as e:
+            logger.error(f"Error getting response: {str(e)}")
+            return {
+                "answer": f"Ein Fehler ist aufgetreten: {str(e)}",
                 "sources": []
             }
     
     def clear_history(self):
         """Clear chat history."""
-        self.history = [] 
+        self.history = []
+        logger.info("Chat history cleared") 
