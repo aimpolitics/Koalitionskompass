@@ -13,6 +13,9 @@ env/
 ENV/
 *.venv/
 .venv/
+.python-version
+pyproject.toml
+uv.lock
 
 # Environment variables
 .env

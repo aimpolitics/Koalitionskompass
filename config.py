@@ -47,15 +47,7 @@ def get_config(key, default=None, section=None):
         logger.info(f"Found {env_key} in environment variables")
         return env_value
     
-    # 3. Parse the .streamlit/secrets.toml.example file
-    secrets_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml.example")
-    if os.path.exists(secrets_path):
-        with open(secrets_path, "r") as f:
-            secrets_content = f.read()
-        if f"[{section}]" in secrets_content and f"{key} = " in secrets_content:
-            logger.info(f"Found {env_key} in .streamlit/secrets.toml.example")
-    
-    # 4. Use default value
+    # 3. Use default value
     logger.warning(f"Using default value for {section}.{key}: {default}")
     return default
 

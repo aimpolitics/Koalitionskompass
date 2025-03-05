@@ -1,8 +1,9 @@
 import streamlit as st
 import os
 from simple_chatbot import SimpleChatbot
-from pinecone_processor import PineconePDFProcessor
+from chatbot import ChatBot
 import logging
+from pinecone_processor import PineconePDFProcessor, initialize_pinecone, create_embeddings, count_documents, PineconeConnectionError
 
 # Konfiguration der Streamlit-App
 st.set_page_config(
@@ -18,23 +19,68 @@ logger = logging.getLogger(__name__)
 
 def initialize_session_state():
     """Initialisiert die Session-Variablen, wenn sie noch nicht existieren."""
-    # Separate Chat-Historien für die beiden Modi
-    if "standard_messages" not in st.session_state:
-        st.session_state.standard_messages = []
-        
-    if "simple_messages" not in st.session_state:
-        st.session_state.simple_messages = []
-        
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    
+    if "simple_chat_history" not in st.session_state:
+        st.session_state.simple_chat_history = []
+    
+    if "vector_store" not in st.session_state:
+        # Vector store should already be initialized by ensure_vectorstore_exists
+        pass
+    
     if "chatbot" not in st.session_state:
-        # Chatbot initialisieren
-        st.session_state.chatbot = SimpleChatbot()
-        
+        try:
+            st.session_state.chatbot = ChatBot(st.session_state.vector_store)
+        except ValueError as e:
+            st.error(f"Fehler bei der Initialisierung des Standard-Chatbots: {str(e)}")
+            st.warning("""
+            ## OpenAI API-Schlüssel fehlt oder ist ungültig
+            
+            Bitte stellen Sie sicher, dass Sie einen gültigen OpenAI API-Schlüssel konfiguriert haben:
+            
+            ### Für Streamlit Cloud:
+            Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
+            ```toml
+            [openai]
+            api_key = "sk-Ihr-OpenAI-API-Schlüssel"
+            ```
+            
+            ### Für lokale Entwicklung:
+            Erstellen Sie eine `.env`-Datei oder `.streamlit/secrets.toml` mit der gleichen Konfiguration.
+            """)
+            st.session_state.chatbot = None
+        except Exception as e:
+            st.error(f"Unerwarteter Fehler bei der Initialisierung des Standard-Chatbots: {str(e)}")
+            st.session_state.chatbot = None
+    
+    if "simple_chatbot" not in st.session_state:
+        try:
+            st.session_state.simple_chatbot = SimpleChatbot()
+        except ValueError as e:
+            st.error(f"Fehler bei der Initialisierung des einfachen Chatbots: {str(e)}")
+            st.warning("""
+            ## OpenAI API-Schlüssel fehlt oder ist ungültig
+            
+            Bitte stellen Sie sicher, dass Sie einen gültigen OpenAI API-Schlüssel konfiguriert haben:
+            
+            ### Für Streamlit Cloud:
+            Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
+            ```toml
+            [openai]
+            api_key = "sk-Ihr-OpenAI-API-Schlüssel"
+            ```
+            
+            ### Für lokale Entwicklung:
+            Erstellen Sie eine `.env`-Datei oder `.streamlit/secrets.toml` mit der gleichen Konfiguration.
+            """)
+            st.session_state.simple_chatbot = None
+        except Exception as e:
+            st.error(f"Unerwarteter Fehler bei der Initialisierung des einfachen Chatbots: {str(e)}")
+            st.session_state.simple_chatbot = None
+    
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = "standard"
-
-    if "simple_chatbot" not in st.session_state:
-        # Verwende Pinecone für die Vektordatenbank
-        st.session_state.simple_chatbot = SimpleChatbot()
 
 def format_source(source):
     """Formatiert eine Quelle für die Anzeige."""
@@ -55,90 +101,121 @@ def format_source(source):
         return "Quelle konnte nicht formatiert werden"
 
 def render_chat_interface(simple_language=False):
-    """Rendert die Chat-Oberfläche und verarbeitet Nutzereingaben."""
-    # Wähle die richtige Chat-Historie basierend auf dem Modus
-    messages_key = "simple_messages" if simple_language else "standard_messages"
+    """Rendert das Chat-Interface je nach ausgewähltem Modus"""
     
-    # Chat-Container
-    chat_container = st.container()
+    # Auswahl der richtigen Chat-Historie basierend auf dem aktiven Modus
+    chat_history = st.session_state.simple_chat_history if simple_language else st.session_state.chat_history
     
-    with chat_container:
-        # Zeige alle bisherigen Nachrichten aus der entsprechenden Historie an
-        for message in st.session_state[messages_key]:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+    # Chat-Verlauf anzeigen
+    for message in chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Input für Benutzer
+    user_input = st.chat_input("Stellen Sie eine Frage zum Regierungsprogramm...")
+    
+    if user_input:
+        # Benutzer-Nachricht speichern und anzeigen
+        with st.chat_message("user"):
+            st.markdown(user_input)
         
-        # Input für neue Nachrichten
-        placeholder_text = "Stellen Sie eine Frage zum Regierungsprogramm (Einfache Sprache)..." if simple_language else "Stellen Sie eine Frage zum Regierungsprogramm..."
-        if prompt := st.chat_input(placeholder_text):
-            # Füge Nutzer-Nachricht zur entsprechenden Chat-Historie hinzu
-            st.session_state[messages_key].append({"role": "user", "content": prompt})
+        # Speichere Nachricht in der richtigen Chat-Historie
+        if simple_language:
+            st.session_state.simple_chat_history.append({"role": "user", "content": user_input})
+        else:
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+        
+        # Lade den richtigen Chatbot basierend auf dem ausgewählten Modus
+        if simple_language:
+            if st.session_state.simple_chatbot is None:
+                with st.chat_message("assistant"):
+                    st.markdown("Der Chatbot konnte aufgrund eines Konfigurationsproblems nicht initialisiert werden. Bitte prüfen Sie die Fehlermeldungen oben.")
+                return
+            chatbot = st.session_state.simple_chatbot
+        else:
+            if st.session_state.chatbot is None:
+                with st.chat_message("assistant"):
+                    st.markdown("Der Chatbot konnte aufgrund eines Konfigurationsproblems nicht initialisiert werden. Bitte prüfen Sie die Fehlermeldungen oben.")
+                return
+            chatbot = st.session_state.chatbot
+        
+        # Antwort-Platzhalter
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            message_placeholder.markdown("Denke...")
             
-            # Zeige Nutzer-Nachricht an
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            
-            # Verarbeite die Anfrage
-            with st.chat_message("assistant"):
-                with st.spinner("Suche im Regierungsprogramm..."):
-                    # Modifiziere den Prompt für einfache Sprache wenn nötig
-                    if simple_language:
-                        prompt_to_use = f"Bitte erkläre in einfacher Sprache: {prompt}"
-                    else:
-                        prompt_to_use = prompt
+            try:
+                # Antwort vom Chatbot
+                response = chatbot.get_response(user_input, simple_language=simple_language)
+                
+                # Antwort anzeigen
+                message_placeholder.markdown(response)
+                
+                # Speichere Antwort in der richtigen Chat-Historie
+                if simple_language:
+                    st.session_state.simple_chat_history.append({"role": "assistant", "content": response})
+                else:
+                    st.session_state.chat_history.append({"role": "assistant", "content": response})
                     
-                    # Erhalte Antwort vom Chatbot mit der korrekten Methode get_response
-                    response = st.session_state.chatbot.get_response(prompt_to_use)
-                    
-                    # Extrahiere Antworttext und Quellen
-                    answer_text = response.get("content", response.get("answer", "Keine Antwort gefunden."))
-                    sources = response.get("sources", [])
-                    
-                    # Zeige die Antwort an
-                    st.markdown(answer_text)
-                    
-                    # Quellen anzeigen, wenn vorhanden
-                    if sources:
-                        sources_html = "<div class='sources'><h4>Quellen:</h4><ul>"
-                        for source in sources:
-                            sources_html += f"<li>{format_source(source)}</li>"
-                        sources_html += "</ul></div>"
-                        st.markdown(sources_html, unsafe_allow_html=True)
-                    
-                    # Speichere die Antwort in der entsprechenden Chat-Historie
-                    full_response = answer_text
-                    if sources:
-                        full_response += "\n\n**Quellen:**\n" + "\n".join([format_source(s) for s in sources])
-                    
-                    st.session_state[messages_key].append({"role": "assistant", "content": full_response})
+            except Exception as e:
+                error_message = f"Entschuldigung, ich konnte keine Antwort generieren: {str(e)}"
+                message_placeholder.markdown(error_message)
+                
+                # Fehler in der Chat-Historie speichern
+                if simple_language:
+                    st.session_state.simple_chat_history.append({"role": "assistant", "content": error_message})
+                else:
+                    st.session_state.chat_history.append({"role": "assistant", "content": error_message})
 
 def reset_current_chat():
-    """Setzt nur den aktuell aktiven Chat zurück"""
+    """Setzt den aktuellen Chat-Verlauf zurück"""
     if st.session_state.active_tab == "standard":
-        st.session_state.standard_messages = []
+        st.session_state.chat_history = []
     else:
-        st.session_state.simple_messages = []
+        st.session_state.simple_chat_history = []
+    
+    st.success("Der aktuelle Chat wurde zurückgesetzt!")
 
 # Überprüfen und erstellen der Pinecone-Vektordatenbank, falls sie nicht existiert
 def ensure_vectorstore_exists():
     try:
-        # Versuche, die Vektordatenbank zu laden
-        processor = PineconePDFProcessor()
-        processor.load_vector_store()
+        # Initialisiere Pinecone
+        vector_store = initialize_pinecone()
         st.success("Verbindung zur Pinecone-Vektordatenbank hergestellt!")
+        return vector_store
+    except ValueError as e:
+        if "API key is missing" in str(e) or "environment is missing" in str(e):
+            # Special handling for API key issues
+            st.error("Fehler: Pinecone API-Schlüssel oder Umgebungsvariablen fehlen")
+            st.warning("""
+            ## Pinecone API-Konfiguration fehlt
+            
+            ### Für Streamlit Cloud:
+            Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
+            ```toml
+            [pinecone]
+            api_key = "Ihr-Pinecone-API-Schlüssel"
+            environment = "Ihre-Pinecone-Region"
+            index_name = "koalitionskompass"
+            namespace = "default"
+            ```
+            
+            ### Für lokale Entwicklung:
+            Erstellen Sie eine `.env`-Datei oder `.streamlit/secrets.toml` mit der gleichen Konfiguration.
+            """)
+            st.stop()
+        else:
+            # General error handling
+            st.error(f"Fehler beim Verbinden mit der Pinecone-Vektordatenbank: {str(e)}")
+            st.info("Bitte stellen Sie sicher, dass die Pinecone-Datenbank bereits erstellt wurde.")
+            st.info("Führen Sie lokal 'python create_vectorstore.py' aus, um die Datenbank zu erstellen.")
+            st.stop()
     except Exception as e:
-        st.error(f"Fehler beim Verbinden mit der Pinecone-Vektordatenbank: {str(e)}")
-        st.info("Bitte stellen Sie sicher, dass die Pinecone-Datenbank bereits erstellt wurde.")
-        st.info("Führen Sie lokal 'python create_vectorstore.py' aus, um die Datenbank zu erstellen.")
+        st.error(f"Unerwarteter Fehler: {str(e)}")
+        st.info("Bitte überprüfen Sie die Logs für weitere Details.")
         st.stop()
 
 def main():
-    # Stellen Sie sicher, dass die Vektordatenbank existiert
-    ensure_vectorstore_exists()
-    
-    # Session State initialisieren
-    initialize_session_state()
-    
     # Titel ohne Logo
     st.title("Koalitionskompass")
     st.markdown("Dein interaktiver Programm-Guide")
@@ -151,6 +228,15 @@ def main():
         
         *Bitte beachten Sie: Der Chatbot kann unvollständige oder falsche Antworten geben und in manchen Fällen halluzinieren. Überprüfen Sie bitte immer die angezeigten Quellenangaben.*
     """)
+    
+    # Stellen Sie sicher, dass die Vektordatenbank existiert
+    # Dies muss vor der Initialisierung des ChatBots geschehen
+    vector_store = ensure_vectorstore_exists()
+    if vector_store:
+        st.session_state.vector_store = vector_store
+    
+    # Session State initialisieren (inklusive Chatbot)
+    initialize_session_state()
     
     # Einfache Modusauswahl mit Buttons
     col1, col2 = st.columns(2)

@@ -3,7 +3,7 @@ import warnings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_pinecone import PineconeVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
-from config import PDF_PATH, PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME, PINECONE_NAMESPACE, get_config
+from config import PDF_PATH, PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME, PINECONE_NAMESPACE
 from text_processor import TextProcessor
 from pinecone import Pinecone, ServerlessSpec
 import os
@@ -14,62 +14,12 @@ import streamlit as st
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Default to None to force checking
-pinecone_api_key = None
-pinecone_environment = None
+# Use configuration from config.py, which now properly prioritizes Streamlit secrets
+pinecone_api_key = PINECONE_API_KEY
+pinecone_environment = PINECONE_ENVIRONMENT
 
-# Debug secrets loading
-logger.info("Starting to load Pinecone configuration...")
-
-# Try from Streamlit secrets first (direct access)
-if hasattr(st, 'secrets'):
-    logger.info("Streamlit secrets available")
-    
-    # Method 1: Direct dict-like access
-    if 'pinecone' in st.secrets:
-        logger.info("Found 'pinecone' section in st.secrets")
-        try:
-            # Debugging - print all keys in pinecone section
-            logger.info(f"Keys in pinecone section: {st.secrets['pinecone'].keys()}")
-            
-            pinecone_api_key = st.secrets['pinecone'].get('api_key')
-            logger.info(f"API Key from st.secrets['pinecone']: {'Found' if pinecone_api_key else 'Not found'}")
-            
-            pinecone_environment = st.secrets['pinecone'].get('environment')
-            logger.info(f"Environment from st.secrets['pinecone']: {'Found' if pinecone_environment else 'Not found'}")
-        except Exception as e:
-            logger.error(f"Error accessing pinecone secrets: {str(e)}")
-    
-    # Method 2: Flat secrets with prefix
-    if pinecone_api_key is None:
-        pinecone_api_key = st.secrets.get("PINECONE_API_KEY")
-        logger.info(f"Tried PINECONE_API_KEY directly: {'Found' if pinecone_api_key else 'Not found'}")
-    
-    if pinecone_environment is None:
-        pinecone_environment = st.secrets.get("PINECONE_ENVIRONMENT")
-        logger.info(f"Tried PINECONE_ENVIRONMENT directly: {'Found' if pinecone_environment else 'Not found'}")
-
-# Try config if not found in secrets
-if pinecone_api_key is None:
-    pinecone_api_key = PINECONE_API_KEY
-    logger.info(f"Using Pinecone API key from config: {'Found' if pinecone_api_key else 'Not found'}")
-
-if pinecone_environment is None:
-    pinecone_environment = PINECONE_ENVIRONMENT
-    logger.info(f"Using Pinecone environment from config: {'Found' if pinecone_environment else 'Not found'}")
-
-# Set environment variables if keys exist
-if pinecone_api_key:
-    os.environ["PINECONE_API_KEY"] = pinecone_api_key
-    logger.info("Set PINECONE_API_KEY in environment variables")
-else:
-    logger.error("No Pinecone API key found in any source!")
-
-if pinecone_environment:
-    os.environ["PINECONE_ENVIRONMENT"] = pinecone_environment
-    logger.info("Set PINECONE_ENVIRONMENT in environment variables")
-else:
-    logger.error("No Pinecone environment found in any source!")
+# Log configuration status (without exposing API keys)
+logger.info(f"Pinecone configuration from config.py: API Key: {'Found' if pinecone_api_key else 'Not found'}, Environment: {pinecone_environment}")
 
 class PineconePDFProcessor:
     def __init__(self):
@@ -105,13 +55,31 @@ class PineconePDFProcessor:
         
         # Check if we have the required credentials
         if not self.api_key:
-            error_msg = "Pinecone API key is missing. Please set it in .env file or Streamlit secrets."
+            error_msg = """
+Pinecone API key is missing. Please check your Streamlit secrets or environment variables.
+
+For Streamlit Cloud deployment, ensure your secrets.toml has the correct format:
+[pinecone]
+api_key = "your-pinecone-api-key"
+environment = "your-pinecone-environment"
+index_name = "koalitionskompass"
+namespace = "default"
+            """
             logger.error(error_msg)
             raise ValueError(error_msg)
             
         if not self.environment and not hasattr(self.pc, 'list_indexes'):
             # Only check environment if we don't already have a working Pinecone instance
-            error_msg = "Pinecone environment is missing. Please set it in .env file or Streamlit secrets."
+            error_msg = """
+Pinecone environment is missing. Please check your Streamlit secrets or environment variables.
+
+For Streamlit Cloud deployment, ensure your secrets.toml has the correct format:
+[pinecone]
+api_key = "your-pinecone-api-key"
+environment = "your-pinecone-environment"  # This should be something like "us-east-1" or "gcp-starter"
+index_name = "koalitionskompass"
+namespace = "default"
+            """
             logger.error(error_msg)
             raise ValueError(error_msg)
             

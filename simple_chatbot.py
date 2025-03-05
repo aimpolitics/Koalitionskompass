@@ -1,18 +1,38 @@
 import os
 import requests
 import json
+import logging
 from langchain_pinecone import PineconeVectorStore
 from config import OPENAI_API_KEY, SYSTEM_PROMPT
 from pinecone_processor import PineconePDFProcessor
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class SimpleChatbot:
     def __init__(self):
         # Lade die Pinecone-Vektordatenbank
         pdf_processor = PineconePDFProcessor()
         self.vector_store = pdf_processor.load_vector_store()
+        
+        # Check if OpenAI API key is available
         self.api_key = OPENAI_API_KEY
+        if not self.api_key:
+            logger.error("OpenAI API key is missing! Please check your Streamlit secrets or environment variables.")
+            raise ValueError("""
+OpenAI API key is missing! 
+
+For Streamlit Cloud deployment, ensure your secrets.toml has the correct format:
+[openai]
+api_key = "your-openai-api-key"
+
+For local development, either use .streamlit/secrets.toml or set the OPENAI_API_KEY environment variable.
+            """)
+            
         self.base_url = "https://oai.hconeai.com/v1"
         self.history = []
+        logger.info("SimpleChatbot initialized successfully with OpenAI API key")
         
     def add_to_history(self, role, content):
         """Add a message to chat history."""
@@ -37,6 +57,13 @@ class SimpleChatbot:
             messages = [
                 {"role": "system", "content": SYSTEM_PROMPT + f"\nKontext: {context}"}
             ] + self.history
+            
+            # Check if API key is valid before making API call
+            if not self.api_key:
+                return {
+                    "answer": "Fehler: OpenAI API-Schlüssel fehlt. Bitte konfigurieren Sie den API-Schlüssel in den Streamlit Secrets.",
+                    "sources": []
+                }
             
             # Make direct API call
             headers = {
@@ -69,15 +96,21 @@ class SimpleChatbot:
                     "answer": answer,
                     "sources": [doc.page_content for doc in sources]
                 }
+            elif response.status_code == 401:
+                logger.error(f"Authentication error with OpenAI API: {response.text}")
+                return {
+                    "answer": "Fehler: Die Authentifizierung mit der OpenAI API ist fehlgeschlagen. Bitte überprüfen Sie Ihren API-Schlüssel.",
+                    "sources": []
+                }
             else:
-                print(f"API Error: {response.status_code}, {response.text}")
+                logger.error(f"API Error: {response.status_code}, {response.text}")
                 return {
                     "answer": f"API-Fehler: {response.status_code}. Bitte versuchen Sie es später erneut.",
                     "sources": []
                 }
                 
         except Exception as e:
-            print(f"Error in get_response: {str(e)}")
+            logger.error(f"Error in get_response: {str(e)}")
             return {
                 "answer": f"Es ist ein Fehler aufgetreten: {str(e)}. Bitte versuchen Sie es später erneut.",
                 "sources": []
