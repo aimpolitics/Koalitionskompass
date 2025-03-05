@@ -3,9 +3,12 @@ import requests
 import json
 import logging
 import re
+import openai
 from langchain_pinecone import PineconeVectorStore
-from config import OPENAI_API_KEY, SYSTEM_PROMPT, MODEL_NAME
-from pinecone_processor import get_vector_store_instance
+from config import (OPENAI_API_KEY, SYSTEM_PROMPT, MODEL_NAME, TEMPERATURE,
+                   SIMPLE_MAX_TOKENS, STANDARD_MAX_TOKENS,
+                   SIMPLE_TOP_K, STANDARD_TOP_K)
+from pinecone_processor import get_vector_store_instance, get_efficient_retriever_instance
 from typing import List, Dict
 
 # Set up logging
@@ -14,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 class SimpleChatbot:
     def __init__(self):
-        # Use the singleton vector store instance
+        # Initialize with default top_k (will be overridden in get_context_from_query)
+        self.retriever = get_efficient_retriever_instance(top_k=SIMPLE_TOP_K)
+        
+        # Still keep the vector store reference for backward compatibility
         self.vector_store = get_vector_store_instance()
         
         # Check if OpenAI API key is available
@@ -29,25 +35,29 @@ For Streamlit Cloud deployment, ensure your secrets.toml has the correct format:
 api_key = "your-openai-api-key"
 
 For local development, either use .streamlit/secrets.toml or set the OPENAI_API_KEY environment variable.
-            """)
-            
+""")
+        
+        # Initialize OpenAI client settings
         self.base_url = "https://oai.hconeai.com/v1"
         self.history = []
         logger.info("SimpleChatbot initialized successfully with OpenAI API key")
         
     def add_to_history(self, role, content):
-        """Add a message to chat history."""
+        """Add a message to the conversation history."""
         self.history.append({"role": role, "content": content})
         
-    def get_context_from_query(self, query, max_results=3):
-        """Get relevant context from vector store using Pinecone's integrated embedding."""
-        logger.info(f"Getting context for query: {query}")
+    def get_context_from_query(self, query, simple_language=False):
+        """Get relevant context using the efficient Pinecone retriever."""
+        # Select appropriate top_k based on language mode
+        top_k = SIMPLE_TOP_K if simple_language else STANDARD_TOP_K
+        logger.info(f"Getting context for query with top_k={top_k} for {'simple' if simple_language else 'standard'} language mode")
+        
         try:
-            # The vector_store's similarity_search will use Pinecone's integrated embedding
-            # to convert the query to a vector on the server side
-            results = self.vector_store.similarity_search(query, k=max_results)
+            # Use the efficient retriever with the appropriate top_k
+            retriever = get_efficient_retriever_instance(top_k=top_k)
+            results = retriever.get_relevant_documents(query)
             context = "\n\n".join([doc.page_content for doc in results])
-            logger.info(f"Retrieved {len(results)} documents from vector store")
+            logger.info(f"Retrieved {len(results)} documents using efficient retriever")
             return context, results
         except Exception as e:
             logger.error(f"Error getting context from query: {str(e)}")
@@ -83,8 +93,8 @@ For local development, either use .streamlit/secrets.toml or set the OPENAI_API_
         try:
             logger.info(f"Getting response for: {query}")
             
-            # Get relevant context from the vector store
-            context, source_docs = self.get_context_from_query(query)
+            # Get relevant context from the vector store with appropriate top_k
+            context, source_docs = self.get_context_from_query(query, simple_language=simple_language)
             
             if not context:
                 logger.warning("No context found for query")
@@ -93,35 +103,49 @@ For local development, either use .streamlit/secrets.toml or set the OPENAI_API_
             # Add the user's message to history
             self.add_to_history("user", query)
             
-            # Create the system message with context
-            system_message = {
-                "role": "system", 
-                "content": f"""{SYSTEM_PROMPT}
+            # Select appropriate max tokens based on language mode
+            tokens_limit = SIMPLE_MAX_TOKENS if simple_language else STANDARD_MAX_TOKENS
+            logger.info(f"Using max_tokens={tokens_limit} for {'simple' if simple_language else 'standard'} language mode")
+            
+            # Build system message with context
+            if simple_language:
+                system_prompt = f"""{SYSTEM_PROMPT}
+
+Verwende einfache Sprache ohne Fremdwörter oder Fachbegriffe. Erkläre komplexe Konzepte in einfachen Worten und verwende kurze Sätze.
 
 Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
 
 {context}
-
-{("Verwende einfache Sprache ohne Fremdwörter oder Fachbegriffe. Erkläre komplexe Konzepte in einfachen Worten und verwende kurze Sätze." if simple_language else "")}
 """
-            }
+            else:
+                system_prompt = f"""{SYSTEM_PROMPT}
+
+Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
+
+{context}
+"""
             
-            # Create messages array
-            messages = [system_message] + self.history
+            # Build messages array for API call
+            messages = [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                }
+            ]
             
-            # Create a client for the OpenAI API
-            import openai
-            client = openai.OpenAI(
-                api_key=self.api_key,
-                base_url=self.base_url
-            )
+            # Add conversation history
+            for message in self.history[-10:]:  # Only include last 10 messages to avoid context overflow
+                messages.append(message)
+            
+            # Create OpenAI client and make API call
+            client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
             
             # Generate response
             response = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=messages,
-                temperature=0.7,
-                max_tokens=1000
+                temperature=TEMPERATURE,
+                max_tokens=tokens_limit
             )
             
             # Extract the assistant's message

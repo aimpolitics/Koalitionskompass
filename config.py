@@ -83,7 +83,14 @@ if not PINECONE_ENVIRONMENT:
 # OpenAI Configuration
 MODEL_NAME = "gpt-4o-mini-2024-07-18"
 TEMPERATURE = 0.7
-MAX_TOKENS = 1000
+# Different max token settings for different modes
+STANDARD_MAX_TOKENS = 1500  # Standard mode gets more tokens
+SIMPLE_MAX_TOKENS = 1000    # Simple mode keeps the original amount
+MAX_TOKENS = STANDARD_MAX_TOKENS  # For backward compatibility
+
+# Retrieval parameters
+STANDARD_TOP_K = 5  # Standard mode retrieves more context chunks
+SIMPLE_TOP_K = 3    # Simple mode retrieves fewer chunks
 
 # Streamlit UI Configuration
 APP_TITLE = "Regierungsprogramm Chatbot"

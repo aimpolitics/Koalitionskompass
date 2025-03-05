@@ -2,7 +2,10 @@ from typing import List, Dict
 from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
-from config import OPENAI_API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS, SYSTEM_PROMPT, PINECONE_INDEX_NAME, PINECONE_NAMESPACE
+from config import (OPENAI_API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS, 
+                   STANDARD_MAX_TOKENS, SIMPLE_MAX_TOKENS, 
+                   STANDARD_TOP_K, SIMPLE_TOP_K,
+                   SYSTEM_PROMPT, PINECONE_INDEX_NAME, PINECONE_NAMESPACE)
 import os
 import logging
 import re
@@ -136,13 +139,19 @@ class ChatBot:
     def get_response(self, query, simple_language=False):
         """Get response for a user query."""
         try:
+            # Select appropriate parameters based on language mode
+            tokens_limit = SIMPLE_MAX_TOKENS if simple_language else STANDARD_MAX_TOKENS
+            top_k = SIMPLE_TOP_K if simple_language else STANDARD_TOP_K
+            
+            logger.info(f"Using max_tokens={tokens_limit} and top_k={top_k} for {'simple' if simple_language else 'standard'} language mode")
+            
             # Select the appropriate retriever based on configuration
-            if self.use_efficient_retriever and not hasattr(self, 'retriever'):
-                logger.info("Setting up efficient retriever")
-                self.retriever = get_efficient_retriever_instance()
-            elif not self.use_efficient_retriever and not hasattr(self, 'retriever'):
+            if self.use_efficient_retriever:
+                logger.info(f"Setting up efficient retriever with top_k={top_k}")
+                self.retriever = get_efficient_retriever_instance(top_k=top_k)
+            else:
                 logger.info("Setting up standard LangChain retriever")
-                self.retriever = self.vector_store.as_retriever()
+                self.retriever = self.vector_store.as_retriever(search_kwargs={"k": top_k})
             
             # Recreate the chain with the appropriate prompt based on the simple_language parameter
             if simple_language:
@@ -152,7 +161,7 @@ class ChatBot:
                     llm=ChatOpenAI(
                         model_name=MODEL_NAME,
                         temperature=TEMPERATURE,
-                        max_tokens=MAX_TOKENS
+                        max_tokens=tokens_limit
                     ),
                     retriever=self.retriever,
                     memory=self.memory,
@@ -169,7 +178,7 @@ class ChatBot:
                     llm=ChatOpenAI(
                         model_name=MODEL_NAME,
                         temperature=TEMPERATURE,
-                        max_tokens=MAX_TOKENS
+                        max_tokens=tokens_limit
                     ),
                     retriever=self.retriever,
                     memory=self.memory,

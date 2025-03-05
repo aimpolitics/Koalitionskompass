@@ -256,7 +256,7 @@ def count_documents():
 
 def get_efficient_retriever_instance(top_k=3):
     """
-    Get or create the efficient retriever singleton instance.
+    Create an efficient retriever instance.
     This uses Pinecone's integrated embedding API for more efficient retrieval.
     
     Args:
@@ -265,22 +265,18 @@ def get_efficient_retriever_instance(top_k=3):
     Returns:
         An instance of EfficientPineconeRetriever
     """
-    global _efficient_retriever_instance
-    
-    if _efficient_retriever_instance is None:
-        try:
-            # Import here to avoid circular imports
-            from efficient_retriever import EfficientPineconeRetriever
-            
-            logger.info(f"Creating efficient retriever instance with top_k={top_k}")
-            _efficient_retriever_instance = EfficientPineconeRetriever(
-                index_name=PINECONE_INDEX_NAME,
-                namespace=PINECONE_NAMESPACE,
-                top_k=top_k
-            )
-            logger.info("Efficient retriever instance created successfully")
-        except Exception as e:
-            logger.error(f"Error creating efficient retriever instance: {str(e)}")
-            raise
-    
-    return _efficient_retriever_instance 
+    try:
+        # Import here to avoid circular imports
+        from efficient_retriever import EfficientPineconeRetriever
+        
+        logger.info(f"Creating efficient retriever instance with top_k={top_k}")
+        retriever_instance = EfficientPineconeRetriever(
+            index_name=PINECONE_INDEX_NAME,
+            namespace=PINECONE_NAMESPACE,
+            top_k=top_k
+        )
+        logger.info(f"Efficient retriever instance created successfully with top_k={top_k}")
+        return retriever_instance
+    except Exception as e:
+        logger.error(f"Error creating efficient retriever instance: {str(e)}")
+        raise
