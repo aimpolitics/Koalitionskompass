@@ -5,7 +5,7 @@ import logging
 import re
 import openai
 from langchain_pinecone import PineconeVectorStore
-from config import (OPENAI_API_KEY, SYSTEM_PROMPT, MODEL_NAME, TEMPERATURE,
+from config import (OPENAI_API_KEY, SIMPLE_SYSTEM_PROMPT, MODEL_NAME, TEMPERATURE,
                    SIMPLE_MAX_TOKENS, STANDARD_MAX_TOKENS,
                    SIMPLE_TOP_K, STANDARD_TOP_K)
 from pinecone_processor import get_vector_store_instance, get_efficient_retriever_instance
@@ -58,6 +58,7 @@ For local development, either use .streamlit/secrets.toml or set the OPENAI_API_
             results = retriever.get_relevant_documents(query)
             context = "\n\n".join([doc.page_content for doc in results])
             logger.info(f"Retrieved {len(results)} documents using efficient retriever")
+            # logger.info(f'Used this system prompt: {SIMPLE_SYSTEM_PROMPT}')
             return context, results
         except Exception as e:
             logger.error(f"Error getting context from query: {str(e)}")
@@ -109,7 +110,7 @@ For local development, either use .streamlit/secrets.toml or set the OPENAI_API_
             
             # Build system message with context
             if simple_language:
-                system_prompt = f"""{SYSTEM_PROMPT}
+                system_prompt = f"""{SIMPLE_SYSTEM_PROMPT}
 
 Verwende einfache Sprache ohne Fremdwörter oder Fachbegriffe. Erkläre komplexe Konzepte in einfachen Worten und verwende kurze Sätze.
 
@@ -118,7 +119,7 @@ Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
 {context}
 """
             else:
-                system_prompt = f"""{SYSTEM_PROMPT}
+                system_prompt = f"""{SIMPLE_SYSTEM_PROMPT}
 
 Nutze die folgenden Informationen, um die Frage des Nutzers zu beantworten:
 

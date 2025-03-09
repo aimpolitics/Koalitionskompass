@@ -57,13 +57,14 @@ def initialize_session_state():
             
             ### Für Streamlit Cloud:
             Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
-            ```toml
+            
+toml
             [openai]
             api_key = "sk-Ihr-OpenAI-API-Schlüssel"
-            ```
+
             
             ### Für lokale Entwicklung:
-            Erstellen Sie eine `.env`-Datei oder `.streamlit/secrets.toml` mit der gleichen Konfiguration.
+            Erstellen Sie eine .env-Datei oder .streamlit/secrets.toml mit der gleichen Konfiguration.
             """)
             
             # Fall back to standard retriever if efficient retriever fails
@@ -92,13 +93,14 @@ def initialize_session_state():
             
             ### Für Streamlit Cloud:
             Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
-            ```toml
+            
+toml
             [openai]
             api_key = "sk-Ihr-OpenAI-API-Schlüssel"
-            ```
+
             
             ### Für lokale Entwicklung:
-            Erstellen Sie eine `.env`-Datei oder `.streamlit/secrets.toml` mit der gleichen Konfiguration.
+            Erstellen Sie eine .env-Datei oder .streamlit/secrets.toml mit der gleichen Konfiguration.
             """)
             st.session_state.simple_chatbot = None
         except Exception as e:
@@ -111,28 +113,18 @@ def initialize_session_state():
 def render_chat_interface(simple_language=False):
     """Rendert das Chat-Interface je nach ausgewähltem Modus"""
     
-    # Auswahl der richtigen Chat-Historie basierend auf dem aktiven Modus
-    chat_history = st.session_state.simple_chat_history if simple_language else st.session_state.chat_history
-    
-    # Chat-Verlauf anzeigen
-    for message in chat_history:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-    
     # Input für Benutzer
+    # Input für Benutzer (wird immer ganz unten angezeigt)
     user_input = st.chat_input("Stellen Sie eine Frage zum Regierungsprogramm...")
     
+    # Auswahl der richtigen Chat-Historie basierend auf dem aktiven Modus
+    chat_history = st.session_state.simple_chat_history if simple_language else st.session_state.chat_history
+
+    # Erstelle Container für die Chat-Elemente (in umgekehrter Reihenfolge, damit das Input ganz unten ist)
+    chat_container = st.container()
+    
+    # Verarbeite Benutzer-Eingabe
     if user_input:
-        # Benutzer-Nachricht speichern und anzeigen
-        with st.chat_message("user"):
-            st.markdown(user_input)
-        
-        # Speichere Nachricht in der richtigen Chat-Historie
-        if simple_language:
-            st.session_state.simple_chat_history.append({"role": "user", "content": user_input})
-        else:
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-        
         # Lade den richtigen Chatbot basierend auf dem ausgewählten Modus
         if simple_language:
             if st.session_state.simple_chatbot is None:
@@ -146,34 +138,58 @@ def render_chat_interface(simple_language=False):
                     st.markdown("Der Chatbot konnte aufgrund eines Konfigurationsproblems nicht initialisiert werden. Bitte prüfen Sie die Fehlermeldungen oben.")
                 return
             chatbot = st.session_state.chatbot
-        
-        # Antwort-Platzhalter
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            message_placeholder.markdown("Denke...")
             
-            try:
-                # Antwort vom Chatbot
-                response = chatbot.get_response(user_input, simple_language=simple_language)
+        # Erstelle einen temporären Container für die aktuelle Nachricht
+        with st.empty():
+            # Zeige Benutzer-Nachricht
+            with st.chat_message("user"):
+                st.markdown(user_input)
+            
+            # Antwort-Platzhalter
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                message_placeholder.markdown("Denke...")
                 
-                # Antwort anzeigen - now directly using the markdown-formatted response
-                message_placeholder.markdown(response)
-                
-                # Speichere Antwort in der richtigen Chat-Historie
-                if simple_language:
-                    st.session_state.simple_chat_history.append({"role": "assistant", "content": response})
-                else:
-                    st.session_state.chat_history.append({"role": "assistant", "content": response})
+                try:
+                    # Antwort vom Chatbot
+                    response = chatbot.get_response(user_input, simple_language=simple_language)
                     
-            except Exception as e:
-                error_message = f"Entschuldigung, ich konnte keine Antwort generieren: {str(e)}"
-                message_placeholder.markdown(error_message)
-                
-                # Fehler in der Chat-Historie speichern
-                if simple_language:
-                    st.session_state.simple_chat_history.append({"role": "assistant", "content": error_message})
-                else:
-                    st.session_state.chat_history.append({"role": "assistant", "content": error_message})
+                    # Antwort anzeigen
+                    message_placeholder.markdown(response)
+                    
+                    # Speichere Nachricht und Antwort in der Chat-Historie
+                    if simple_language:
+                        st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": response})
+                        st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input})
+                    else:
+                        st.session_state.chat_history.insert(0, {"role": "assistant", "content": response})
+                        st.session_state.chat_history.insert(0, {"role": "user", "content": user_input})
+                        
+                except Exception as e:
+                    error_message = f"Entschuldigung, ich konnte keine Antwort generieren: {str(e)}"
+                    message_placeholder.markdown(error_message)
+                    
+                    # Fehler in der Chat-Historie speichern
+                    if simple_language:
+                        st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": error_message})
+                        st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input})
+                    else:
+                        st.session_state.chat_history.insert(0, {"role": "assistant", "content": error_message})
+                        st.session_state.chat_history.insert(0, {"role": "user", "content": user_input})
+    
+    # Zeige die gesamte Chat-Historie im Container
+    with chat_container:
+        # Gruppiere Nachrichten in Paare (Benutzer + Antwort)
+        for i in range(0, len(chat_history), 2):
+            if i + 1 < len(chat_history):  # Stelle sicher, dass sowohl Benutzer als auch Antwort vorhanden sind
+                # Nachrichten in der richtigen Reihenfolge anzeigen (Benutzer zuerst, dann Antwort)
+                with st.chat_message("user"):
+                    st.markdown(chat_history[i]["content"])
+                with st.chat_message("assistant"):
+                    st.markdown(chat_history[i+1]["content"])
+            elif i < len(chat_history):  # Falls nur eine Benutzer-Nachricht ohne Antwort existiert
+                with st.chat_message("user"):
+                    st.markdown(chat_history[i]["content"])
 
 def reset_current_chat():
     """Setzt den aktuellen Chat-Verlauf zurück"""
@@ -196,7 +212,6 @@ def ensure_vectorstore_exists():
         st.session_state.vector_store = vector_store
         logger.info("Vector store initialized successfully")
         
-        st.success("Verbindung zur Pinecone-Vektordatenbank hergestellt!")
         return vector_store
     except ValueError as e:
         if "API key is missing" in str(e) or "environment is missing" in str(e):
@@ -210,16 +225,17 @@ def ensure_vectorstore_exists():
             
             ### Für Streamlit Cloud:
             Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
-            ```toml
+            
+toml
             [pinecone]
             api_key = "Ihr-Pinecone-API-Schlüssel"
             environment = "Ihre-Pinecone-Umgebung"
             index_name = "Ihr-Index-Name"
             namespace = "Ihr-Namespace"
-            ```
+
             
             ### Für lokale Entwicklung:
-            Erstellen Sie eine `.env`-Datei oder `.streamlit/secrets.toml` mit der gleichen Konfiguration.
+            Erstellen Sie eine .env-Datei oder .streamlit/secrets.toml mit der gleichen Konfiguration.
             """)
         elif "does not exist" in str(e):
             # Special handling for missing index
@@ -307,7 +323,7 @@ def main():
         if st.button("Standard", key="standard_mode", 
                     type="primary" if st.session_state.active_tab == "standard" else "secondary",
                     use_container_width=True):
-            st.session_state.active_tab = "standard"
+            st.session_state.active_tab = "standard"    
             st.rerun()
             
     with col2:
@@ -334,7 +350,7 @@ def main():
     footer_container = st.container()
     with footer_container:
         st.markdown("---")
-        st.markdown("© 2023 AimPolitics | Koalitionskompass")
+        st.markdown("© 2025 AI Empowered Politics and Dejan Đukić | Koalitionskompass")
     
     # Chat Interface innerhalb des Containers rendern
     with chat_container:
