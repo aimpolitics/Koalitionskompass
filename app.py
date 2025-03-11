@@ -6,6 +6,7 @@ from pinecone_processor import get_vector_store_instance, PineconeConnectionErro
 from simple_chatbot import SimpleChatbot
 from chatbot import ChatBot
 import traceback
+import hashlib
 
 # Konfiguration der Streamlit-App
 st.set_page_config(
@@ -110,6 +111,10 @@ toml
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = "standard"
 
+def generate_message_hash(content):
+    """Generate a unique hash based on message content."""
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
+
 def render_chat_interface(simple_language=False):
     """Rendert das Chat-Interface je nach ausgewähltem Modus"""
     
@@ -139,57 +144,69 @@ def render_chat_interface(simple_language=False):
                 return
             chatbot = st.session_state.chatbot
             
-        # Erstelle einen temporären Container für die aktuelle Nachricht
-        with st.empty():
-            # Zeige Benutzer-Nachricht
-            with st.chat_message("user"):
-                st.markdown(user_input)
-            
-            # Antwort-Platzhalter
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                message_placeholder.markdown("Denke...")
+        # Antwort-Platzhalter - Der key hier ist wichtig, damit die temporäre Anzeige nicht später auch nochmal gerendert wird
+        message_placeholder = st.empty()
                 
-                try:
-                    # Antwort vom Chatbot
-                    response = chatbot.get_response(user_input, simple_language=simple_language)
+        try:
+            # Antwort vom Chatbot
+            response = chatbot.get_response(user_input, simple_language=simple_language)
+            
+            # Generiere Hash-Werte für Nachrichten
+            user_hash = generate_message_hash(user_input)
+            response_hash = generate_message_hash(response)
+            
+            # Speichere Nachricht und Antwort in der Chat-Historie mit Hash
+            if simple_language:
+                st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": response, "hash": response_hash})
+                st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
+            else:
+                st.session_state.chat_history.insert(0, {"role": "assistant", "content": response, "hash": response_hash})
+                st.session_state.chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
                     
-                    # Antwort anzeigen
-                    message_placeholder.markdown(response)
-                    
-                    # Speichere Nachricht und Antwort in der Chat-Historie
-                    if simple_language:
-                        st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": response})
-                        st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input})
-                    else:
-                        st.session_state.chat_history.insert(0, {"role": "assistant", "content": response})
-                        st.session_state.chat_history.insert(0, {"role": "user", "content": user_input})
-                        
-                except Exception as e:
-                    error_message = f"Entschuldigung, ich konnte keine Antwort generieren: {str(e)}"
-                    message_placeholder.markdown(error_message)
-                    
-                    # Fehler in der Chat-Historie speichern
-                    if simple_language:
-                        st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": error_message})
-                        st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input})
-                    else:
-                        st.session_state.chat_history.insert(0, {"role": "assistant", "content": error_message})
-                        st.session_state.chat_history.insert(0, {"role": "user", "content": user_input})
+        except Exception as e:
+            error_message = f"Entschuldigung, ich konnte keine Antwort generieren: {str(e)}"
+            
+            # Generiere Hash für Fehlermeldung
+            error_hash = generate_message_hash(error_message)
+            user_hash = generate_message_hash(user_input)
+            
+            # Fehler in der Chat-Historie speichern
+            if simple_language:
+                st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": error_message, "hash": error_hash})
+                st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
+            else:
+                st.session_state.chat_history.insert(0, {"role": "assistant", "content": error_message, "hash": error_hash})
+                st.session_state.chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
+        
+        # Trigger rerun to immediately show the updated chat history
+        st.rerun()
     
-    # Zeige die gesamte Chat-Historie im Container
+    # Dedupliziere die Chat-Historie basierend auf Hash-Werten
+    deduplicated_history = []
+    seen_hashes = set()
+    
+    for message in chat_history:
+        # Wenn es ältere Nachrichten ohne Hash gibt, füge einen hinzu
+        if "hash" not in message:
+            message["hash"] = generate_message_hash(message["content"])
+            
+        if message["hash"] not in seen_hashes:
+            seen_hashes.add(message["hash"])
+            deduplicated_history.append(message)
+    
+    # Zeige die deduplizierte Chat-Historie im Container
     with chat_container:
         # Gruppiere Nachrichten in Paare (Benutzer + Antwort)
-        for i in range(0, len(chat_history), 2):
-            if i + 1 < len(chat_history):  # Stelle sicher, dass sowohl Benutzer als auch Antwort vorhanden sind
+        for i in range(0, len(deduplicated_history), 2):
+            if i + 1 < len(deduplicated_history):  # Stelle sicher, dass sowohl Benutzer als auch Antwort vorhanden sind
                 # Nachrichten in der richtigen Reihenfolge anzeigen (Benutzer zuerst, dann Antwort)
                 with st.chat_message("user"):
-                    st.markdown(chat_history[i]["content"])
+                    st.markdown(deduplicated_history[i]["content"])
                 with st.chat_message("assistant"):
-                    st.markdown(chat_history[i+1]["content"])
-            elif i < len(chat_history):  # Falls nur eine Benutzer-Nachricht ohne Antwort existiert
+                    st.markdown(deduplicated_history[i+1]["content"])
+            elif i < len(deduplicated_history):  # Falls nur eine Benutzer-Nachricht ohne Antwort existiert
                 with st.chat_message("user"):
-                    st.markdown(chat_history[i]["content"])
+                    st.markdown(deduplicated_history[i]["content"])
 
 def reset_current_chat():
     """Setzt den aktuellen Chat-Verlauf zurück"""
