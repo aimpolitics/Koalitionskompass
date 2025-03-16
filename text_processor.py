@@ -1,16 +1,15 @@
 from typing import List, Dict
 import re
 from langchain.schema import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitter import SpacyTextSplitter
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 
 class TextProcessor:
     def __init__(self):
-        self.text_splitter = RecursiveCharacterTextSplitter(
+        self.text_splitter = SpacyTextSplitter(
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP,
-            length_function=len,
-            separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]
+            pipeline="sentencizer"  # Use the sentencizer pipeline which is faster and doesn't require full spaCy models
         )
     
     def clean_text(self, text: str) -> str:

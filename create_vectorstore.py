@@ -1,4 +1,4 @@
-from pinecone_processor import PineconePDFProcessor
+from pinecone_processor import PineconePDFProcessor, get_pinecone_instance, count_documents
 import logging
 import os
 from pinecone import Pinecone
@@ -10,8 +10,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def main():
-    """Create vector store from PDF document."""
-    logger.info("Starting vector store creation with Pinecone...")
+    """Create vector store from PDF document using Pinecone's integrated embedding."""
+    logger.info("Starting vector store creation with Pinecone integrated embedding...")
     
     # Debug Pinecone credentials
     api_key = PINECONE_API_KEY
@@ -22,54 +22,56 @@ def main():
     logger.info(f"Environment: {environment}")
     logger.info(f"Index name: {index_name}")
     
-    # Explicitly initialize Pinecone first
+    # Use the singleton pattern to initialize Pinecone
     try:
-        logger.info("Setting up Pinecone client directly")
-        pc = Pinecone(api_key=api_key)
+        logger.info("Setting up Pinecone client")
+        pc = get_pinecone_instance()
         index_list = pc.list_indexes().names()
         logger.info(f"Available Pinecone indexes: {index_list}")
         
         if index_name not in index_list:
             logger.error(f"Index {index_name} not found in Pinecone")
+            print(f"""
+            The index '{index_name}' does not exist. You need to create an index configured for integrated embedding.
+            
+            Example code to create a suitable index:
+            
+            from pinecone import Pinecone
+            
+            pc = Pinecone(api_key="{api_key}")
+            
+            # Create an index specifically configured for a hosted embedding model
+            pc.create_index_for_model(
+                name="{index_name}",
+                cloud="aws",
+                region="us-east-1",
+                embed={{
+                    "model": "multilingual-e5-large",  # Choose appropriate model
+                    "field_map": {{"text": "page_content"}}
+                }}
+            )
+            """)
             raise ValueError(f"Index {index_name} does not exist")
     except Exception as e:
-        logger.error(f"Error initializing Pinecone directly: {str(e)}", exc_info=True)
+        logger.error(f"Error initializing Pinecone: {str(e)}", exc_info=True)
         raise
     
-    # Initialize Pinecone PDF processor
+    # Initialize Pinecone processor
     pdf_processor = PineconePDFProcessor()
     
     try:
-        # Process PDF and create vector store
-        logger.info("Processing PDF and creating embeddings...")
+        logger.info("Processing PDF and creating vector store")
+        vector_store = pdf_processor.process_pdf()
+        logger.info("Vector store created successfully!")
         
-        # Log PDF path
-        logger.info(f"PDF path: {pdf_processor.pdf_path if hasattr(pdf_processor, 'pdf_path') else 'Not set directly'}")
+        # Count documents
+        count = count_documents()
+        logger.info(f"Vector store contains {count} vectors")
         
-        # Load and process PDF
-        logger.info("Loading and processing PDF...")
-        documents = pdf_processor.load_and_process_pdf()
-        logger.info(f"PDF processed. Number of document chunks: {len(documents)}")
-        
-        # Create vector store from documents
-        logger.info("Creating vector store from documents...")
-        vector_store = pdf_processor.create_vector_store(documents)
-        logger.info("Vector store created successfully in Pinecone")
-        
-        # Check document count
-        from pinecone_processor import count_documents
-        doc_count = count_documents()
-        logger.info(f"Document count in Pinecone: {doc_count}")
-        
-        # Test the vector store
-        logger.info("Testing vector store...")
-        results = vector_store.similarity_search("test", k=1)
-        logger.info(f"Vector store test results: {len(results)} results found")
-        logger.info("Vector store is working correctly!")
-        
+        return vector_store
     except Exception as e:
         logger.error(f"Error creating vector store: {str(e)}", exc_info=True)
         raise
-
+    
 if __name__ == "__main__":
     main() 

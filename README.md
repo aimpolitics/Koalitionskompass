@@ -280,4 +280,49 @@ Die Anwendung besteht aus folgenden Hauptkomponenten:
 
 ## Lizenz
 
-MIT License 
+MIT License
+
+## Using Pinecone Integrated Embedding
+
+This application has been optimized to use Pinecone's Integrated Embedding API, which eliminates the need to run embedding models locally. This significantly improves startup time and reduces resource usage.
+
+### Creating an Index with Integrated Embedding
+
+Before using the application, you need to create a Pinecone index that supports integrated embedding:
+
+```python
+from pinecone import Pinecone
+
+pc = Pinecone(api_key="YOUR_API_KEY")
+
+# Create an index specifically configured for a hosted embedding model
+index_config = pc.create_index_for_model(
+    name="koalitionskompass",  # Use your desired index name
+    cloud="aws",
+    region="us-east-1",
+    embed={
+        "model": "multilingual-e5-large",  # Choose an appropriate model for your language
+        "field_map": {"text": "page_content"}  # Maps field names
+    }
+)
+```
+
+### Benefits of Integrated Embedding
+
+1. **Faster Startup Time**: No need to download and initialize embedding models locally
+2. **Reduced Memory Usage**: Embedding computation happens on Pinecone's servers
+3. **Simplicity**: Fewer dependencies and components to manage
+4. **Consistency**: Same embedding model used for both indexing and querying
+
+### Configuration
+
+Make sure your config.py or environment variables include the necessary Pinecone settings:
+
+```python
+PINECONE_API_KEY = "your-api-key"
+PINECONE_ENVIRONMENT = "your-environment"  # e.g., "us-east-1"
+PINECONE_INDEX_NAME = "koalitionskompass"  # Name of your index with integrated embedding
+PINECONE_NAMESPACE = "default"  # Or your chosen namespace
+```
+
+For more information, see the [Pinecone Integrated Embedding documentation](https://docs.pinecone.io/guides/inference/integrated-inference). 

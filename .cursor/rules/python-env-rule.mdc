@@ -1,0 +1,8 @@
+---
+description: always use uv to run python files
+globs: 
+alwaysApply: false
+---
+
+1. always use uv to run python files (e.g. uv run main.py, or uv run python.., or uv pip install -r requirements.txt)
+2. you are allowed to auto-run anything uv related in agent yolo mode
