@@ -5,8 +5,10 @@ from PIL import Image
 from pinecone_processor import get_vector_store_instance, PineconeConnectionError
 from simple_chatbot import SimpleChatbot
 from chatbot import ChatBot
+from supabase_service import SupabaseService
 import traceback
 import hashlib
+from time import time
 
 # Konfiguration der Streamlit-App
 st.set_page_config(
@@ -20,96 +22,99 @@ st.set_page_config(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def initialize_session_state():
-    """Initialisiert die Session-Variablen, wenn sie noch nicht existieren."""
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+# def initialize_session_state():
+#     """Initialisiert die Session-Variablen, wenn sie noch nicht existieren."""
+#     if "chat_history" not in st.session_state:
+#         st.session_state.chat_history = []
     
-    if "simple_chat_history" not in st.session_state:
-        st.session_state.simple_chat_history = []
+#     if "simple_chat_history" not in st.session_state:
+#         st.session_state.simple_chat_history = []
     
-    if "vector_store" not in st.session_state:
-        # Vector store should already be initialized by ensure_vectorstore_exists
-        pass
+#     if "vector_store" not in st.session_state:
+#         # Vector store should already be initialized by ensure_vectorstore_exists
+#         pass
     
-    if "chatbot" not in st.session_state:
-        try:
-            # Use efficient retriever by default (integrated embedding)
-            logger.info("Initializing ChatBot with efficient retriever")
+#     if "session_id" not in st.session_state:
+#         st.session_state.session_id = hashlib.md5(str(os.urandom(32)).encode()).hexdigest()
+    
+#     if "chatbot" not in st.session_state:
+#         try:
+#             # Use efficient retriever by default (integrated embedding)
+#             logger.info("Initializing ChatBot with efficient retriever")
             
-            # Ensure the vector store exists
-            if "vector_store" not in st.session_state or st.session_state.vector_store is None:
-                logger.warning("Vector store not initialized, initializing now")
-                ensure_vectorstore_exists()
+#             # Ensure the vector store exists
+#             if "vector_store" not in st.session_state or st.session_state.vector_store is None:
+#                 logger.warning("Vector store not initialized, initializing now")
+#                 ensure_vectorstore_exists()
             
-            if "vector_store" in st.session_state and st.session_state.vector_store is not None:
-                st.session_state.chatbot = ChatBot(st.session_state.vector_store, use_efficient_retriever=True)
-                logger.info("ChatBot with efficient retriever initialized successfully")
-            else:
-                raise ValueError("Vector store initialization failed")
+#             if "vector_store" in st.session_state and st.session_state.vector_store is not None:
+#                 st.session_state.chatbot = ChatBot(st.session_state.vector_store, use_efficient_retriever=True)
+#                 logger.info("ChatBot with efficient retriever initialized successfully")
+#             else:
+#                 raise ValueError("Vector store initialization failed")
                 
-        except ValueError as e:
-            st.error(f"Fehler bei der Initialisierung des Standard-Chatbots: {str(e)}")
-            logger.error(f"Error initializing ChatBot: {str(e)}")
-            st.warning("""
-            ## OpenAI API-Schlüssel fehlt oder ist ungültig
+#         except ValueError as e:
+#             st.error(f"Fehler bei der Initialisierung des Standard-Chatbots: {str(e)}")
+#             logger.error(f"Error initializing ChatBot: {str(e)}")
+#             st.warning("""
+#             ## OpenAI API-Schlüssel fehlt oder ist ungültig
             
-            Bitte stellen Sie sicher, dass Sie einen gültigen OpenAI API-Schlüssel konfiguriert haben:
+#             Bitte stellen Sie sicher, dass Sie einen gültigen OpenAI API-Schlüssel konfiguriert haben:
             
-            ### Für Streamlit Cloud:
-            Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
+#             ### Für Streamlit Cloud:
+#             Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
             
-toml
-            [openai]
-            api_key = "sk-Ihr-OpenAI-API-Schlüssel"
+# toml
+#             [openai]
+#             api_key = "sk-Ihr-OpenAI-API-Schlüssel"
 
             
-            ### Für lokale Entwicklung:
-            Erstellen Sie eine .env-Datei oder .streamlit/secrets.toml mit der gleichen Konfiguration.
-            """)
+#             ### Für lokale Entwicklung:
+#             Erstellen Sie eine .env-Datei oder .streamlit/secrets.toml mit der gleichen Konfiguration.
+#             """)
             
-            # Fall back to standard retriever if efficient retriever fails
-            try:
-                logger.info("Trying to initialize ChatBot with standard retriever")
-                st.session_state.chatbot = ChatBot(st.session_state.vector_store, use_efficient_retriever=False)
-                logger.info("ChatBot with standard retriever initialized successfully")
-            except Exception as fallback_error:
-                logger.error(f"Error initializing ChatBot with standard retriever: {str(fallback_error)}")
-                st.session_state.chatbot = None
+#             # Fall back to standard retriever if efficient retriever fails
+#             try:
+#                 logger.info("Trying to initialize ChatBot with standard retriever")
+#                 st.session_state.chatbot = ChatBot(st.session_state.vector_store, use_efficient_retriever=False)
+#                 logger.info("ChatBot with standard retriever initialized successfully")
+#             except Exception as fallback_error:
+#                 logger.error(f"Error initializing ChatBot with standard retriever: {str(fallback_error)}")
+#                 st.session_state.chatbot = None
                 
-        except Exception as e:
-            st.error(f"Unerwarteter Fehler bei der Initialisierung des Standard-Chatbots: {str(e)}")
-            logger.error(f"Unexpected error initializing ChatBot: {str(e)}")
-            st.session_state.chatbot = None
+#         except Exception as e:
+#             st.error(f"Unerwarteter Fehler bei der Initialisierung des Standard-Chatbots: {str(e)}")
+#             logger.error(f"Unexpected error initializing ChatBot: {str(e)}")
+#             st.session_state.chatbot = None
     
-    if "simple_chatbot" not in st.session_state:
-        try:
-            st.session_state.simple_chatbot = SimpleChatbot()
-        except ValueError as e:
-            st.error(f"Fehler bei der Initialisierung des einfachen Chatbots: {str(e)}")
-            st.warning("""
-            ## OpenAI API-Schlüssel fehlt oder ist ungültig
+#     if "simple_chatbot" not in st.session_state:
+#         try:
+#             st.session_state.simple_chatbot = SimpleChatbot()
+#         except ValueError as e:
+#             st.error(f"Fehler bei der Initialisierung des einfachen Chatbots: {str(e)}")
+#             st.warning("""
+#             ## OpenAI API-Schlüssel fehlt oder ist ungültig
             
-            Bitte stellen Sie sicher, dass Sie einen gültigen OpenAI API-Schlüssel konfiguriert haben:
+#             Bitte stellen Sie sicher, dass Sie einen gültigen OpenAI API-Schlüssel konfiguriert haben:
             
-            ### Für Streamlit Cloud:
-            Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
+#             ### Für Streamlit Cloud:
+#             Gehen Sie zu den Streamlit Cloud-Einstellungen > Secrets und fügen Sie die folgende Konfiguration hinzu:
             
-toml
-            [openai]
-            api_key = "sk-Ihr-OpenAI-API-Schlüssel"
+# toml
+#             [openai]
+#             api_key = "sk-Ihr-OpenAI-API-Schlüssel"
 
             
-            ### Für lokale Entwicklung:
-            Erstellen Sie eine .env-Datei oder .streamlit/secrets.toml mit der gleichen Konfiguration.
-            """)
-            st.session_state.simple_chatbot = None
-        except Exception as e:
-            st.error(f"Unerwarteter Fehler bei der Initialisierung des einfachen Chatbots: {str(e)}")
-            st.session_state.simple_chatbot = None
+#             ### Für lokale Entwicklung:
+#             Erstellen Sie eine .env-Datei oder .streamlit/secrets.toml mit der gleichen Konfiguration.
+#             """)
+#             st.session_state.simple_chatbot = None
+#         except Exception as e:
+#             st.error(f"Unerwarteter Fehler bei der Initialisierung des einfachen Chatbots: {str(e)}")
+#             st.session_state.simple_chatbot = None
     
-    if "active_tab" not in st.session_state:
-        st.session_state.active_tab = "standard"
+#     if "active_tab" not in st.session_state:
+#         st.session_state.active_tab = "standard"
 
 def generate_message_hash(content):
     """Generate a unique hash based on message content."""
@@ -162,6 +167,17 @@ def render_chat_interface(simple_language=False):
             else:
                 st.session_state.chat_history.insert(0, {"role": "assistant", "content": response, "hash": response_hash})
                 st.session_state.chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
+            
+            # Save to Supabase
+            st.session_state.supabase_service.save_prompt(
+                
+                # use a timestamp + random string as session_id             
+                session_id=str(time()) + str(os.urandom(32)),
+                prompt_text=user_input,
+                response_text=response,
+                language_mode="simple" if simple_language else "standard",
+                is_einfache_sprache=simple_language
+            )
                     
         except Exception as e:
             error_message = f"Entschuldigung, ich konnte keine Antwort generieren: {str(e)}"
@@ -278,6 +294,17 @@ toml
         return None
 
 def main():
+    
+    # Initialize Supabase service
+    if 'supabase_service' not in st.session_state:
+        supabase_service = SupabaseService()
+        st.session_state.supabase_service = supabase_service
+        logger.info("Supabase service initialized successfully")
+
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = hashlib.md5(str(os.urandom(32)).encode()).hexdigest()
+        logger.info("Session ID initialized successfully")
+    
     # Titel ohne Logo
     st.title("Koalitionskompass")
     st.markdown("Dein interaktiver Programm-Guide")

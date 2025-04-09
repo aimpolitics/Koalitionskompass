@@ -47,9 +47,11 @@ PINECONE_ENVIRONMENT=$(extract_secret "pinecone" "environment")
 PINECONE_INDEX_NAME=$(extract_secret "pinecone" "index_name")
 PINECONE_NAMESPACE=$(extract_secret "pinecone" "namespace")
 APP_ENVIRONMENT=$(extract_secret "app" "environment")
+SUPABASE_URL=$(extract_secret "supabase" "url")
+SUPABASE_ANON_KEY=$(extract_secret "supabase" "anon_key")
 
 # Validate required secrets
-if [[ -z "$OPENAI_API_KEY" || -z "$PINECONE_API_KEY" || -z "$PINECONE_ENVIRONMENT" ]]; then
+if [[ -z "$OPENAI_API_KEY" || -z "$PINECONE_API_KEY" || -z "$PINECONE_ENVIRONMENT" || -z "$SUPABASE_URL" || -z "$SUPABASE_ANON_KEY" ]]; then
     echo -e "${RED}Error: Required secrets are missing.${NC}"
     echo "Please check your $SECRETS_FILE file."
     exit 1
@@ -99,10 +101,12 @@ gcloud run deploy "$SERVICE_NAME" \
     --set-env-vars "PINECONE_ENVIRONMENT=$PINECONE_ENVIRONMENT" \
     --set-env-vars "PINECONE_INDEX_NAME=$PINECONE_INDEX_NAME" \
     --set-env-vars "PINECONE_NAMESPACE=$PINECONE_NAMESPACE" \
-    --set-env-vars "APP_ENVIRONMENT=$APP_ENVIRONMENT"
+    --set-env-vars "APP_ENVIRONMENT=$APP_ENVIRONMENT" \
+    --set-env-vars "SUPABASE_URL=$SUPABASE_URL" \
+    --set-env-vars "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
 
 # Output the service URL
 echo -e "${GREEN}Deployment complete!${NC}"
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.url)')
 echo -e "${GREEN}Your service is available at: $SERVICE_URL${NC}"
-echo -e "${YELLOW}Note: Environment variables have been set from your secrets.toml file.${NC}" 
+echo -e "${YELLOW}Note: Environment variables have been set from your secrets.toml file.${NC}"

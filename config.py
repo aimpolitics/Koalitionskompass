@@ -59,6 +59,14 @@ OPENAI_API_KEY = get_config("api_key", section="openai")
 if not OPENAI_API_KEY:
     logger.warning("OpenAI API key is missing! Application will not function correctly.")
 
+# Supabase Configuration
+SUPABASE_URL = get_config("url", section="supabase")
+SUPABASE_ANON_KEY = get_config("anon_key", section="supabase")
+print(SUPABASE_URL)
+print(SUPABASE_ANON_KEY)
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    logger.warning("Supabase credentials are missing! Application will not function correctly.")
+
 # PDF and Database Paths
 PDF_PATH = "data/Regierungsprogramm_2025.pdf"
 DB_PATH = "data/vectorstore"
