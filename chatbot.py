@@ -2,7 +2,7 @@ from typing import List, Dict
 from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
-from config import (OPENAI_API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS, 
+from config_germany import (OPENAI_API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS, 
                    STANDARD_MAX_TOKENS, SIMPLE_MAX_TOKENS, 
                    STANDARD_TOP_K, SIMPLE_TOP_K,
                    SYSTEM_PROMPT, PINECONE_INDEX_NAME, PINECONE_NAMESPACE)

@@ -4,7 +4,7 @@ from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
-from config import PINECONE_NAMESPACE, PINECONE_INDEX_NAME
+from config_germany import PINECONE_NAMESPACE, PINECONE_INDEX_NAME
 from pinecone_processor import get_pinecone_instance, PassthroughEmbeddings
 
 # Set up logging

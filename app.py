@@ -12,7 +12,7 @@ from time import time
 
 # Konfiguration der Streamlit-App
 st.set_page_config(
-    page_title="Koalitionskompass",
+    page_title="Koalitionskompass Deutschland",
     page_icon="📄",
     layout="centered",
     initial_sidebar_state="collapsed"
@@ -120,6 +120,14 @@ def generate_message_hash(content):
     """Generate a unique hash based on message content."""
     return hashlib.md5(content.encode('utf-8')).hexdigest()
 
+def render_spinner():
+    """Zeigt einen Spinner an, während die Antwort generiert wird"""
+    with st.spinner("Antwort wird generiert..."):
+        # Simuliere eine kurze Verzögerung
+        while st.session_state.loading_response:
+            pass
+    # Trigger rerun to show the spinner
+
 def render_chat_interface(simple_language=False):
     """Rendert das Chat-Interface je nach ausgewähltem Modus"""
     
@@ -130,99 +138,104 @@ def render_chat_interface(simple_language=False):
     # Auswahl der richtigen Chat-Historie basierend auf dem aktiven Modus
     chat_history = st.session_state.simple_chat_history if simple_language else st.session_state.chat_history
 
-    # Erstelle Container für die Chat-Elemente (in umgekehrter Reihenfolge, damit das Input ganz unten ist)
-    chat_container = st.container()
-    
-    # Verarbeite Benutzer-Eingabe
-    if user_input:
-        # Lade den richtigen Chatbot basierend auf dem ausgewählten Modus
-        if simple_language:
-            if st.session_state.simple_chatbot is None:
-                with st.chat_message("assistant"):
-                    st.markdown("Der Chatbot konnte aufgrund eines Konfigurationsproblems nicht initialisiert werden. Bitte prüfen Sie die Fehlermeldungen oben.")
-                return
-            chatbot = st.session_state.simple_chatbot
-        else:
-            if st.session_state.chatbot is None:
-                with st.chat_message("assistant"):
-                    st.markdown("Der Chatbot konnte aufgrund eines Konfigurationsproblems nicht initialisiert werden. Bitte prüfen Sie die Fehlermeldungen oben.")
-                return
-            chatbot = st.session_state.chatbot
-            
-        # Antwort-Platzhalter - Der key hier ist wichtig, damit die temporäre Anzeige nicht später auch nochmal gerendert wird
-        message_placeholder = st.empty()
-                
-        try:
-            # Antwort vom Chatbot
-            response = chatbot.get_response(user_input, simple_language=simple_language)
-            
-            # Generiere Hash-Werte für Nachrichten
-            user_hash = generate_message_hash(user_input)
-            response_hash = generate_message_hash(response)
-            
-            # Speichere Nachricht und Antwort in der Chat-Historie mit Hash
-            if simple_language:
-                st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": response, "hash": response_hash})
-                st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
-            else:
-                st.session_state.chat_history.insert(0, {"role": "assistant", "content": response, "hash": response_hash})
-                st.session_state.chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
-            
-            # Save to Supabase
-            st.session_state.supabase_service.save_prompt(
-                
-                # use a timestamp + random string as session_id             
-                session_id=str(time()) + str(os.urandom(32)),
-                prompt_text=user_input,
-                response_text=response,
-                language_mode="simple" if simple_language else "standard",
-                is_einfache_sprache=simple_language
-            )
-                    
-        except Exception as e:
-            error_message = f"Entschuldigung, ich konnte keine Antwort generieren: {str(e)}"
-            
-            # Generiere Hash für Fehlermeldung
-            error_hash = generate_message_hash(error_message)
-            user_hash = generate_message_hash(user_input)
-            
-            # Fehler in der Chat-Historie speichern
-            if simple_language:
-                st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": error_message, "hash": error_hash})
-                st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
-            else:
-                st.session_state.chat_history.insert(0, {"role": "assistant", "content": error_message, "hash": error_hash})
-                st.session_state.chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
+    with st.spinner("Antwort wird generiert...", show_time=True):
+
+        # Erstelle Container für die Chat-Elemente (in umgekehrter Reihenfolge, damit das Input ganz unten ist)
+        chat_container = st.container()
         
-        # Trigger rerun to immediately show the updated chat history
-        st.rerun()
-    
-    # Dedupliziere die Chat-Historie basierend auf Hash-Werten
-    deduplicated_history = []
-    seen_hashes = set()
-    
-    for message in chat_history:
-        # Wenn es ältere Nachrichten ohne Hash gibt, füge einen hinzu
-        if "hash" not in message:
-            message["hash"] = generate_message_hash(message["content"])
+        # Verarbeite Benutzer-Eingabe
+        if user_input:
+            # Zeige die Benutzer-Nachricht an    
+            # Lade den richtigen Chatbot basierend auf dem ausgewählten Modus
+            if simple_language:
+                if st.session_state.simple_chatbot is None:
+                    with st.chat_message("assistant"):
+                        st.markdown("Der Chatbot konnte aufgrund eines Konfigurationsproblems nicht initialisiert werden. Bitte prüfen Sie die Fehlermeldungen oben.")
+                    return
+                chatbot = st.session_state.simple_chatbot
+            else:
+                if st.session_state.chatbot is None:
+                    with st.chat_message("assistant"):
+                        st.markdown("Der Chatbot konnte aufgrund eines Konfigurationsproblems nicht initialisiert werden. Bitte prüfen Sie die Fehlermeldungen oben.")
+                    return
+                chatbot = st.session_state.chatbot
+                
+            # Antwort-Platzhalter - Der key hier ist wichtig, damit die temporäre Anzeige nicht später auch nochmal gerendert wird
+            message_placeholder = st.empty()
+                    
+            try:
+                # Antwort vom Chatbot
+                st.session_state.loading_response = True
+                response = chatbot.get_response(user_input, simple_language=simple_language)
+                st.session_state.loading_response = False
+                
+                # Generiere Hash-Werte für Nachrichten
+                user_hash = generate_message_hash(user_input)
+                response_hash = generate_message_hash(response)
+                
+                # Speichere Nachricht und Antwort in der Chat-Historie mit Hash
+                if simple_language:
+                    st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": response, "hash": response_hash})
+                    st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
+                else:
+                    st.session_state.chat_history.insert(0, {"role": "assistant", "content": response, "hash": response_hash})
+                    st.session_state.chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
+                
+                # Save to Supabase
+                st.session_state.supabase_service.save_prompt(
+                    
+                    # use a timestamp + random string as session_id             
+                    session_id=str(time()) + st.session_state.version,
+                    prompt_text=user_input,
+                    response_text=response,
+                    language_mode="simple" if simple_language else "standard",
+                    is_einfache_sprache=simple_language
+                )
+                        
+            except Exception as e:
+                error_message = f"Entschuldigung, ich konnte keine Antwort generieren: {str(e)}"
+                
+                # Generiere Hash für Fehlermeldung
+                error_hash = generate_message_hash(error_message)
+                user_hash = generate_message_hash(user_input)
+                
+                # Fehler in der Chat-Historie speichern
+                if simple_language:
+                    st.session_state.simple_chat_history.insert(0, {"role": "assistant", "content": error_message, "hash": error_hash})
+                    st.session_state.simple_chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
+                else:
+                    st.session_state.chat_history.insert(0, {"role": "assistant", "content": error_message, "hash": error_hash})
+                    st.session_state.chat_history.insert(0, {"role": "user", "content": user_input, "hash": user_hash})
             
-        if message["hash"] not in seen_hashes:
-            seen_hashes.add(message["hash"])
-            deduplicated_history.append(message)
-    
-    # Zeige die deduplizierte Chat-Historie im Container
-    with chat_container:
-        # Gruppiere Nachrichten in Paare (Benutzer + Antwort)
-        for i in range(0, len(deduplicated_history), 2):
-            if i + 1 < len(deduplicated_history):  # Stelle sicher, dass sowohl Benutzer als auch Antwort vorhanden sind
-                # Nachrichten in der richtigen Reihenfolge anzeigen (Benutzer zuerst, dann Antwort)
-                with st.chat_message("user"):
-                    st.markdown(deduplicated_history[i]["content"])
-                with st.chat_message("assistant"):
-                    st.markdown(deduplicated_history[i+1]["content"])
-            elif i < len(deduplicated_history):  # Falls nur eine Benutzer-Nachricht ohne Antwort existiert
-                with st.chat_message("user"):
-                    st.markdown(deduplicated_history[i]["content"])
+            # Trigger rerun to immediately show the updated chat history
+            st.rerun()
+            
+        # Dedupliziere die Chat-Historie basierend auf Hash-Werten
+        deduplicated_history = []
+        seen_hashes = set()
+        
+        for message in chat_history:
+            # Wenn es ältere Nachrichten ohne Hash gibt, füge einen hinzu
+            if "hash" not in message:
+                message["hash"] = generate_message_hash(message["content"])
+                
+            if message["hash"] not in seen_hashes:
+                seen_hashes.add(message["hash"])
+                deduplicated_history.append(message)
+        
+        # Zeige die deduplizierte Chat-Historie im Container
+        with chat_container:
+            # Gruppiere Nachrichten in Paare (Benutzer + Antwort)
+            for i in range(0, len(deduplicated_history), 2):
+                if i + 1 < len(deduplicated_history):  # Stelle sicher, dass sowohl Benutzer als auch Antwort vorhanden sind
+                    # Nachrichten in der richtigen Reihenfolge anzeigen (Benutzer zuerst, dann Antwort)
+                    with st.chat_message("user"):
+                        st.markdown(deduplicated_history[i]["content"])
+                    with st.chat_message("assistant"):
+                        st.markdown(deduplicated_history[i+1]["content"])
+                elif i < len(deduplicated_history):  # Falls nur eine Benutzer-Nachricht ohne Antwort existiert
+                    with st.chat_message("user"):
+                        st.markdown(deduplicated_history[i]["content"])
 
 def reset_current_chat():
     """Setzt den aktuellen Chat-Verlauf zurück"""
@@ -304,16 +317,20 @@ def main():
     if 'session_id' not in st.session_state:
         st.session_state.session_id = hashlib.md5(str(os.urandom(32)).encode()).hexdigest()
         logger.info("Session ID initialized successfully")
+
+    if st.session_state not in st.session_state:
+        st.session_state.loading_response = False
     
     # Titel ohne Logo
-    st.title("Koalitionskompass")
+    st.title("Koalitionskompass Deutschland")
+    st.session_state.version = "kkompass_deutschland"
     st.markdown("Dein interaktiver Programm-Guide")
     
     # Info-Box mit Beschreibung des Chatbots
     st.info("""
         **📖 Über diesen Chatbot:**
         
-        Dieser Chatbot beantwortet Ihre Fragen zum Regierungsprogramm 2025-2029. Die Antworten basieren auf den Inhalten des offiziellen Dokuments, mit Quellenangaben zu den entsprechenden Seiten.
+        Dieser Chatbot beantwortet Ihre Fragen zum Koalitionsvertrag 2025. Die Antworten basieren auf den Inhalten des offiziellen Dokuments, mit Quellenangaben zu den entsprechenden Seiten.
         
         *Bitte beachten Sie: Der Chatbot kann unvollständige oder falsche Antworten geben und in manchen Fällen halluzinieren. Überprüfen Sie bitte immer die angezeigten Quellenangaben.*
     """)

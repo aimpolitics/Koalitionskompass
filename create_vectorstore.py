@@ -1,6 +1,7 @@
 from pinecone_processor import PineconePDFProcessor, get_pinecone_instance, count_documents
 import logging
 import os
+import argparse
 from pinecone import Pinecone
 import streamlit as st
 from config import PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME
@@ -9,14 +10,14 @@ from config import PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def main():
+def main(index_name=None, file_path=None):
     """Create vector store from PDF document using Pinecone's integrated embedding."""
     logger.info("Starting vector store creation with Pinecone integrated embedding...")
     
     # Debug Pinecone credentials
     api_key = PINECONE_API_KEY
     environment = PINECONE_ENVIRONMENT
-    index_name = PINECONE_INDEX_NAME
+    index_name = index_name or PINECONE_INDEX_NAME
     
     logger.info(f"API key present: {'Yes' if api_key else 'No'}")
     logger.info(f"Environment: {environment}")
@@ -57,11 +58,11 @@ def main():
         raise
     
     # Initialize Pinecone processor
-    pdf_processor = PineconePDFProcessor()
+    pdf_processor = PineconePDFProcessor(index_name=index_name)
     
     try:
         logger.info("Processing PDF and creating vector store")
-        vector_store = pdf_processor.process_pdf()
+        vector_store = pdf_processor.process_pdf(file_path=file_path)
         logger.info("Vector store created successfully!")
         
         # Count documents
@@ -74,4 +75,9 @@ def main():
         raise
     
 if __name__ == "__main__":
-    main() 
+    parser = argparse.ArgumentParser(description='Create Pinecone vector store from PDF document')
+    parser.add_argument('--index', type=str, help='Pinecone index name', required=False)
+    parser.add_argument('--file', type=str, help='Path to PDF file to index', required=True)
+    args = parser.parse_args()
+    
+    main(index_name=args.index, file_path=args.file)

@@ -5,7 +5,7 @@ import logging
 import re
 import openai
 from langchain_pinecone import PineconeVectorStore
-from config import (OPENAI_API_KEY, SIMPLE_SYSTEM_PROMPT, MODEL_NAME, TEMPERATURE,
+from config_germany import (OPENAI_API_KEY, SIMPLE_SYSTEM_PROMPT, MODEL_NAME, TEMPERATURE,
                    SIMPLE_MAX_TOKENS, STANDARD_MAX_TOKENS,
                    SIMPLE_TOP_K, STANDARD_TOP_K)
 from pinecone_processor import get_vector_store_instance, get_efficient_retriever_instance

@@ -52,14 +52,19 @@ class PassthroughEmbeddings(Embeddings):
         # Return placeholder values - these aren't used since Pinecone does the embedding
         return [0.0] * self.dimension
 
-def get_pinecone_instance():
-    """Get or create the Pinecone singleton instance."""
+def get_pinecone_instance(index_name: str = None):
+    """Get or create the Pinecone singleton instance.
+    
+    Args:
+        index_name: Optional Pinecone index name. Falls back to PINECONE_INDEX_NAME from config.
+    """
     global _pinecone_instance
     
     if _pinecone_instance is None:
         logger.info("Initializing Pinecone instance")
         pinecone_api_key = PINECONE_API_KEY
         pinecone_environment = PINECONE_ENVIRONMENT
+        target_index = index_name or PINECONE_INDEX_NAME
         
         if not pinecone_api_key:
             error_msg = "Pinecone API key is missing. Please check your Streamlit secrets or environment variables."
@@ -74,11 +79,11 @@ def get_pinecone_instance():
             
             # Check if index exists
             index_names = _pinecone_instance.list_indexes().names()
-            if PINECONE_INDEX_NAME not in index_names:
-                logger.warning(f"Pinecone index {PINECONE_INDEX_NAME} does not exist")
-                raise ValueError(f"Pinecone index {PINECONE_INDEX_NAME} does not exist. Please create it first.")
+            if target_index not in index_names:
+                logger.warning(f"Pinecone index {target_index} does not exist")
+                raise ValueError(f"Pinecone index {target_index} does not exist. Please create it first.")
             else:
-                logger.info(f"Pinecone index {PINECONE_INDEX_NAME} exists. Available indexes: {index_names}")
+                logger.info(f"Pinecone index {target_index} exists. Available indexes: {index_names}")
         except Exception as e:
             logger.error(f"Error initializing Pinecone: {str(e)}")
             raise
@@ -116,12 +121,17 @@ class PineconePDFProcessor:
     """Class to process PDF documents and create/load a Pinecone vector store.
     Modified to use Pinecone's integrated embedding API."""
     
-    def __init__(self):
-        """Initialize the processor."""
+    def __init__(self, index_name: str = None):
+        """Initialize the processor.
+        
+        Args:
+            index_name: Optional Pinecone index name. Falls back to PINECONE_INDEX_NAME from config.
+        """
         logger.info("Initializing PineconePDFProcessor")
         try:
             # Initialize Pinecone (using singleton pattern)
-            self.pc = get_pinecone_instance()
+            self.pc = get_pinecone_instance(index_name=index_name)
+            self.index_name = index_name or PINECONE_INDEX_NAME
             # Initialize the text processor
             self.text_processor = TextProcessor()
             logger.info("PineconePDFProcessor initialized successfully")
@@ -129,12 +139,17 @@ class PineconePDFProcessor:
             logger.error(f"Error initializing PineconePDFProcessor: {str(e)}")
             raise
 
-    def load_and_process_pdf(self) -> List:
-        """Load and process a PDF document."""
-        logger.info(f"Loading PDF from {PDF_PATH}")
+    def load_and_process_pdf(self, file_path: str = None) -> List:
+        """Load and process a PDF document.
+        
+        Args:
+            file_path: Path to PDF file. If None, uses PDF_PATH from config.
+        """
+        pdf_path = file_path or PDF_PATH
+        logger.info(f"Loading PDF from {pdf_path}")
         try:
             # Load the PDF
-            loader = PyPDFLoader(PDF_PATH)
+            loader = PyPDFLoader(pdf_path)
             documents = loader.load()
             
             # Use the TextProcessor to clean and split documents at sentence boundaries
@@ -160,7 +175,7 @@ class PineconePDFProcessor:
         logger.info("Creating vector store with Pinecone's integrated embedding")
         try:
             # Get the Pinecone index
-            index = self.pc.Index(PINECONE_INDEX_NAME)
+            index = self.pc.Index(self.index_name)
             
             # Prepare records for integrated embedding
             # Maximum batch size for upsert_records is 96 as per Pinecone limitation
@@ -224,10 +239,15 @@ class PineconePDFProcessor:
         logger.info("Loading existing vector store")
         return get_vector_store_instance()
 
-    def process_pdf(self) -> PineconeVectorStore:
-        """Process a PDF document and create or load a vector store."""
+    def process_pdf(self, file_path: str = None) -> PineconeVectorStore:
+        """Process a PDF document and create or load a vector store.
+        
+        Args:
+            file_path: Path to PDF file. If None, uses PDF_PATH from config.
+        """
+        logger.info(f"Processing PDF for index: {self.index_name}")
         try:
-            documents = self.load_and_process_pdf()
+            documents = self.load_and_process_pdf(file_path=file_path)
             return self.create_vector_store(documents)
         except Exception as e:
             logger.error(f"Error in process_pdf: {str(e)}")

@@ -24,3 +24,6 @@ spacy>=3.0.0
 
 # Other utilities
 requests>=2.31.0 
+
+# Backend
+supabase>=2.15.0
